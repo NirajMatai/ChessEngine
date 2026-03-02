@@ -2,7 +2,7 @@
 
 using namespace std;
 
-// Piece and Color Definitions
+// --- PIECE & COLOR DEFINITIONS ---
 const int EMPTY = 0;
 
 const int PAWN   = 1;
@@ -15,8 +15,20 @@ const int KING   = 6;
 const int WHITE = 8;
 const int BLACK = 16;
 
-// The 0x88 board array
+// --- THE BOARD ---
 int board[128];
+
+// --- GAME STATE VARIABLES (Phase 2, Step 2) ---
+int sideToMove = WHITE; 
+int enPassantSquare = -1; // -1 means no en passant capture is currently possible
+
+// Castling rights (1 means we CAN castle, 0 means we LOST the right)
+int castleWK = 1; // White Kingside
+int castleWQ = 1; // White Queenside
+int castleBK = 1; // Black Kingside
+int castleBQ = 1; // Black Queenside
+
+// ----------------------------------------------
 
 void clearBoard() {
     for (int i = 0; i < 128; i++) {
@@ -24,7 +36,6 @@ void clearBoard() {
     }
 }
 
-// Converts the integer piece value to its corresponding ASCII character
 char getPieceChar(int piece) {
     switch (piece) {
         case EMPTY: return '.';
@@ -44,28 +55,33 @@ char getPieceChar(int piece) {
     }
 }
 
-// Prints the 0x88 array as a standard 8x8 chessboard
 void printBoard() {
     cout << "\n  a b c d e f g h\n\n";
-    
-    // Loop from Rank 8 (top) down to Rank 1 (bottom)
     for (int rank = 7; rank >= 0; rank--) {
-        cout << rank + 1 << " "; // Print the rank number on the left
-        
+        cout << rank + 1 << " ";
         for (int file = 0; file < 8; file++) {
-            // Calculate the 0x88 array index
             int square = rank * 16 + file;
             cout << getPieceChar(board[square]) << " ";
         }
-        
-        cout << rank + 1 << "\n"; // Print the rank number on the right
+        cout << rank + 1 << "\n";
     }
-    
     cout << "\n  a b c d e f g h\n\n";
+}
+
+// Helper function to print the invisible game state
+void printGameState() {
+    cout << "Side to move: " << (sideToMove == WHITE ? "White" : "Black") << endl;
+    cout << "En Passant Square: " << (enPassantSquare == -1 ? "None" : to_string(enPassantSquare)) << endl;
+    cout << "Castling Rights: ";
+    cout << (castleWK ? "K" : "-");
+    cout << (castleWQ ? "Q" : "-");
+    cout << (castleBK ? "k" : "-");
+    cout << (castleBQ ? "q" : "-") << endl << endl;
 }
 
 int main() {
     clearBoard();
     printBoard();
+    printGameState();
     return 0;
 }
