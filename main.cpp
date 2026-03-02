@@ -1,4 +1,5 @@
 #include <iostream>
+#include <string>
 
 using namespace std;
 
@@ -18,21 +19,56 @@ const int BLACK = 16;
 // --- THE BOARD ---
 int board[128];
 
-// --- GAME STATE VARIABLES (Phase 2, Step 2) ---
+// --- GAME STATE VARIABLES ---
 int sideToMove = WHITE; 
-int enPassantSquare = -1; // -1 means no en passant capture is currently possible
+int enPassantSquare = -1;
 
-// Castling rights (1 means we CAN castle, 0 means we LOST the right)
-int castleWK = 1; // White Kingside
-int castleWQ = 1; // White Queenside
-int castleBK = 1; // Black Kingside
-int castleBQ = 1; // Black Queenside
-
-// ----------------------------------------------
+int castleWK = 1; 
+int castleWQ = 1; 
+int castleBK = 1; 
+int castleBQ = 1; 
 
 void clearBoard() {
     for (int i = 0; i < 128; i++) {
         board[i] = EMPTY;
+    }
+}
+
+// Phase 2, Step 3: Parse FEN string to set up the board
+void parseFEN(string fen) {
+    clearBoard();
+    
+    int rank = 7; // Start at the 8th rank (top of board)
+    int file = 0; // Start at the 'a' file (left of board)
+
+    for (char const &c : fen) {
+        if (c == ' ') break; // Stop parsing after the pieces section
+
+        if (c == '/') {
+            rank--;
+            file = 0;
+        } else if (isdigit(c)) {
+            file += (c - '0'); // Add empty squares
+        } else {
+            int square = rank * 16 + file;
+            int piece = EMPTY;
+
+            if (c == 'P') piece = WHITE | PAWN;
+            else if (c == 'N') piece = WHITE | KNIGHT;
+            else if (c == 'B') piece = WHITE | BISHOP;
+            else if (c == 'R') piece = WHITE | ROOK;
+            else if (c == 'Q') piece = WHITE | QUEEN;
+            else if (c == 'K') piece = WHITE | KING;
+            else if (c == 'p') piece = BLACK | PAWN;
+            else if (c == 'n') piece = BLACK | KNIGHT;
+            else if (c == 'b') piece = BLACK | BISHOP;
+            else if (c == 'r') piece = BLACK | ROOK;
+            else if (c == 'q') piece = BLACK | QUEEN;
+            else if (c == 'k') piece = BLACK | KING;
+
+            board[square] = piece;
+            file++;
+        }
     }
 }
 
@@ -68,7 +104,6 @@ void printBoard() {
     cout << "\n  a b c d e f g h\n\n";
 }
 
-// Helper function to print the invisible game state
 void printGameState() {
     cout << "Side to move: " << (sideToMove == WHITE ? "White" : "Black") << endl;
     cout << "En Passant Square: " << (enPassantSquare == -1 ? "None" : to_string(enPassantSquare)) << endl;
@@ -80,8 +115,11 @@ void printGameState() {
 }
 
 int main() {
-    clearBoard();
+    // Load the standard starting chess position
+    parseFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    
     printBoard();
     printGameState();
+    
     return 0;
 }
