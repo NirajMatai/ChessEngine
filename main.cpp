@@ -28,6 +28,10 @@ int castleWQ = 1;
 int castleBK = 1; 
 int castleBQ = 1; 
 
+//MOVE OFFSETS
+int knightOffsets[8] = {33, 31, 18, 14, -14, -18, -31, -33};
+int kingOffsets[8]   = {17, 16, 15, 1, -1, -15, -16, -17};
+
 void clearBoard() {
     for (int i = 0; i < 128; i++) {
         board[i] = EMPTY;
@@ -104,6 +108,16 @@ void printBoard() {
     cout << "\n  a b c d e f g h\n\n";
 }
 
+// Helper to convert array index (e.g., 1) to chess square (e.g., "b1")
+string squareToAlgebraic(int sq) {
+    int rank = sq / 16;
+    int file = sq % 16;
+    string s = "";
+    s += (char)('a' + file);
+    s += (char)('1' + rank);
+    return s;
+}
+
 void printGameState() {
     cout << "Side to move: " << (sideToMove == WHITE ? "White" : "Black") << endl;
     cout << "En Passant Square: " << (enPassantSquare == -1 ? "None" : to_string(enPassantSquare)) << endl;
@@ -114,11 +128,69 @@ void printGameState() {
     cout << (castleBQ ? "q" : "-") << endl << endl;
 }
 
+// Phase 2, Step 4: Move Generation (Leapers only for now)
+void generateMoves() {
+    cout << "--- GENERATING MOVES FOR " << (sideToMove == WHITE ? "WHITE" : "BLACK") << " ---\n";
+    
+    for (int square = 0; square < 128; square++) {
+        // Skip ghost squares
+        if (square & 0x88) continue;
+        
+        int piece = board[square];
+        if (piece == EMPTY) continue;
+        
+        int pieceColor = piece & (WHITE | BLACK);
+        if (pieceColor != sideToMove) continue;
+
+        // Bitwise trick to strip color and get just the piece type (1 to 6)
+        int pieceType = piece & 7; 
+        
+        // KNIGHT MOVES
+        if (pieceType == KNIGHT) {
+            for (int i = 0; i < 8; i++) {
+                int target = square + knightOffsets[i];
+                
+                // 0x88 check: Is target on the board?
+                if ((target & 0x88) == 0) {
+                    int targetPiece = board[target];
+                    int targetColor = targetPiece & (WHITE | BLACK);
+                    
+                    // Valid if empty or has enemy piece
+                    if (targetPiece == EMPTY || targetColor != sideToMove) {
+                        cout << "Knight on " << squareToAlgebraic(square) << " jumps to " << squareToAlgebraic(target);
+                        if (targetPiece != EMPTY) cout << " (CAPTURE)";
+                        cout << "\n";
+                    }
+                }
+            }
+        }
+        
+        // KING MOVES
+        else if (pieceType == KING) {
+            for (int i = 0; i < 8; i++) {
+                int target = square + kingOffsets[i];
+                if ((target & 0x88) == 0) {
+                    int targetPiece = board[target];
+                    int targetColor = targetPiece & (WHITE | BLACK);
+                    
+                    if (targetPiece == EMPTY || targetColor != sideToMove) {
+                        cout << "King on " << squareToAlgebraic(square) << " steps to " << squareToAlgebraic(target);
+                        if (targetPiece != EMPTY) cout << " (CAPTURE)";
+                        cout << "\n";
+                    }
+                }
+            }
+        }
+    }
+    cout << "-----------------------------------\n\n";
+}
+
 int main() {
     // Load the standard starting chess position
     parseFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     
     printBoard();
+    generateMoves();
     printGameState();
     
     return 0;
