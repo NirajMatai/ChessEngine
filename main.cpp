@@ -5,7 +5,6 @@ using namespace std;
 
 // --- PIECE & COLOR DEFINITIONS ---
 const int EMPTY = 0;
-
 const int PAWN   = 1;
 const int KNIGHT = 2;
 const int BISHOP = 3;
@@ -16,21 +15,20 @@ const int KING   = 6;
 const int WHITE = 8;
 const int BLACK = 16;
 
-// --- THE BOARD ---
+// --- THE BOARD & STATE ---
 int board[128];
-
-// --- GAME STATE VARIABLES ---
 int sideToMove = WHITE; 
 int enPassantSquare = -1;
+int castleWK = 1, castleWQ = 1, castleBK = 1, castleBQ = 1; 
 
-int castleWK = 1; 
-int castleWQ = 1; 
-int castleBK = 1; 
-int castleBQ = 1; 
-
-//MOVE OFFSETS
+// --- MOVE OFFSETS ---
 int knightOffsets[8] = {33, 31, 18, 14, -14, -18, -31, -33};
 int kingOffsets[8]   = {17, 16, 15, 1, -1, -15, -16, -17};
+
+// New Slider Offsets
+int bishopOffsets[4] = {17, 15, -15, -17}; // Diagonals
+int rookOffsets[4]   = {16, 1, -1, -16};   // Verticals and Horizontals
+int queenOffsets[8]  = {17, 16, 15, 1, -1, -15, -16, -17}; // All 8 directions
 
 void clearBoard() {
     for (int i = 0; i < 128; i++) {
@@ -38,21 +36,16 @@ void clearBoard() {
     }
 }
 
-// Phase 2, Step 3: Parse FEN string to set up the board
 void parseFEN(string fen) {
     clearBoard();
-    
-    int rank = 7; // Start at the 8th rank (top of board)
-    int file = 0; // Start at the 'a' file (left of board)
+    int rank = 7, file = 0;
 
     for (char const &c : fen) {
-        if (c == ' ') break; // Stop parsing after the pieces section
-
+        if (c == ' ') break; 
         if (c == '/') {
-            rank--;
-            file = 0;
+            rank--; file = 0;
         } else if (isdigit(c)) {
-            file += (c - '0'); // Add empty squares
+            file += (c - '0'); 
         } else {
             int square = rank * 16 + file;
             int piece = EMPTY;
@@ -79,18 +72,12 @@ void parseFEN(string fen) {
 char getPieceChar(int piece) {
     switch (piece) {
         case EMPTY: return '.';
-        case WHITE | PAWN: return 'P';
-        case WHITE | KNIGHT: return 'N';
-        case WHITE | BISHOP: return 'B';
-        case WHITE | ROOK: return 'R';
-        case WHITE | QUEEN: return 'Q';
-        case WHITE | KING: return 'K';
-        case BLACK | PAWN: return 'p';
-        case BLACK | KNIGHT: return 'n';
-        case BLACK | BISHOP: return 'b';
-        case BLACK | ROOK: return 'r';
-        case BLACK | QUEEN: return 'q';
-        case BLACK | KING: return 'k';
+        case WHITE | PAWN: return 'P'; case WHITE | KNIGHT: return 'N';
+        case WHITE | BISHOP: return 'B'; case WHITE | ROOK: return 'R';
+        case WHITE | QUEEN: return 'Q'; case WHITE | KING: return 'K';
+        case BLACK | PAWN: return 'p'; case BLACK | KNIGHT: return 'n';
+        case BLACK | BISHOP: return 'b'; case BLACK | ROOK: return 'r';
+        case BLACK | QUEEN: return 'q'; case BLACK | KING: return 'k';
         default: return '?';
     }
 }
@@ -100,15 +87,21 @@ void printBoard() {
     for (int rank = 7; rank >= 0; rank--) {
         cout << rank + 1 << " ";
         for (int file = 0; file < 8; file++) {
-            int square = rank * 16 + file;
-            cout << getPieceChar(board[square]) << " ";
+            cout << getPieceChar(board[rank * 16 + file]) << " ";
         }
         cout << rank + 1 << "\n";
     }
     cout << "\n  a b c d e f g h\n\n";
 }
 
-// Helper to convert array index (e.g., 1) to chess square (e.g., "b1")
+void printGameState() {
+    cout << "Side to move: " << (sideToMove == WHITE ? "White" : "Black") << endl;
+    cout << "En Passant Square: " << (enPassantSquare == -1 ? "None" : to_string(enPassantSquare)) << endl;
+    cout << "Castling Rights: ";
+    cout << (castleWK ? "K" : "-"); cout << (castleWQ ? "Q" : "-");
+    cout << (castleBK ? "k" : "-"); cout << (castleBQ ? "q" : "-") << endl << endl;
+}
+
 string squareToAlgebraic(int sq) {
     int rank = sq / 16;
     int file = sq % 16;
@@ -118,22 +111,10 @@ string squareToAlgebraic(int sq) {
     return s;
 }
 
-void printGameState() {
-    cout << "Side to move: " << (sideToMove == WHITE ? "White" : "Black") << endl;
-    cout << "En Passant Square: " << (enPassantSquare == -1 ? "None" : to_string(enPassantSquare)) << endl;
-    cout << "Castling Rights: ";
-    cout << (castleWK ? "K" : "-");
-    cout << (castleWQ ? "Q" : "-");
-    cout << (castleBK ? "k" : "-");
-    cout << (castleBQ ? "q" : "-") << endl << endl;
-}
-
-// Phase 2, Step 4: Move Generation (Leapers only for now)
 void generateMoves() {
     cout << "--- GENERATING MOVES FOR " << (sideToMove == WHITE ? "WHITE" : "BLACK") << " ---\n";
     
     for (int square = 0; square < 128; square++) {
-        // Skip ghost squares
         if (square & 0x88) continue;
         
         int piece = board[square];
@@ -142,22 +123,18 @@ void generateMoves() {
         int pieceColor = piece & (WHITE | BLACK);
         if (pieceColor != sideToMove) continue;
 
-        // Bitwise trick to strip color and get just the piece type (1 to 6)
         int pieceType = piece & 7; 
         
-        // KNIGHT MOVES
-        if (pieceType == KNIGHT) {
+        // --- LEAPERS (Knight & King) ---
+        if (pieceType == KNIGHT || pieceType == KING) {
+            int* offsets = (pieceType == KNIGHT) ? knightOffsets : kingOffsets;
             for (int i = 0; i < 8; i++) {
-                int target = square + knightOffsets[i];
-                
-                // 0x88 check: Is target on the board?
+                int target = square + offsets[i];
                 if ((target & 0x88) == 0) {
                     int targetPiece = board[target];
                     int targetColor = targetPiece & (WHITE | BLACK);
-                    
-                    // Valid if empty or has enemy piece
                     if (targetPiece == EMPTY || targetColor != sideToMove) {
-                        cout << "Knight on " << squareToAlgebraic(square) << " jumps to " << squareToAlgebraic(target);
+                        cout << getPieceChar(piece) << " on " << squareToAlgebraic(square) << " moves to " << squareToAlgebraic(target);
                         if (targetPiece != EMPTY) cout << " (CAPTURE)";
                         cout << "\n";
                     }
@@ -165,19 +142,36 @@ void generateMoves() {
             }
         }
         
-        // KING MOVES
-        else if (pieceType == KING) {
-            for (int i = 0; i < 8; i++) {
-                int target = square + kingOffsets[i];
-                if ((target & 0x88) == 0) {
+        // --- SLIDERS (Bishop, Rook, Queen) ---
+        else if (pieceType == BISHOP || pieceType == ROOK || pieceType == QUEEN) {
+            int* offsets;
+            int numDirections;
+
+            if (pieceType == BISHOP) { offsets = bishopOffsets; numDirections = 4; }
+            else if (pieceType == ROOK) { offsets = rookOffsets; numDirections = 4; }
+            else { offsets = queenOffsets; numDirections = 8; } 
+
+            for (int i = 0; i < numDirections; i++) {
+                int target = square + offsets[i];
+                
+                // Keep sliding until we hit something or go off-board
+                while ((target & 0x88) == 0) {
                     int targetPiece = board[target];
                     int targetColor = targetPiece & (WHITE | BLACK);
-                    
-                    if (targetPiece == EMPTY || targetColor != sideToMove) {
-                        cout << "King on " << squareToAlgebraic(square) << " steps to " << squareToAlgebraic(target);
-                        if (targetPiece != EMPTY) cout << " (CAPTURE)";
-                        cout << "\n";
+
+                    if (targetPiece == EMPTY) {
+                        cout << getPieceChar(piece) << " on " << squareToAlgebraic(square) << " slides to " << squareToAlgebraic(target) << "\n";
+                    } else if (targetColor != sideToMove) {
+                        // Hit an enemy: capture it, but stop sliding
+                        cout << getPieceChar(piece) << " on " << squareToAlgebraic(square) << " slides to " << squareToAlgebraic(target) << " (CAPTURE)\n";
+                        break;
+                    } else {
+                        // Hit a friendly piece: path blocked, stop sliding
+                        break;
                     }
+                    
+                    // Move one more square in the same direction
+                    target += offsets[i];
                 }
             }
         }
@@ -186,12 +180,12 @@ void generateMoves() {
 }
 
 int main() {
-    // Load the standard starting chess position
+    // Starting position
     parseFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    
     printBoard();
-    generateMoves();
     printGameState();
+    
+    generateMoves();
     
     return 0;
 }
