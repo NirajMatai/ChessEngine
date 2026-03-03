@@ -24,11 +24,9 @@ int castleWK = 1, castleWQ = 1, castleBK = 1, castleBQ = 1;
 // --- MOVE OFFSETS ---
 int knightOffsets[8] = {33, 31, 18, 14, -14, -18, -31, -33};
 int kingOffsets[8]   = {17, 16, 15, 1, -1, -15, -16, -17};
-
-// New Slider Offsets
-int bishopOffsets[4] = {17, 15, -15, -17}; // Diagonals
-int rookOffsets[4]   = {16, 1, -1, -16};   // Verticals and Horizontals
-int queenOffsets[8]  = {17, 16, 15, 1, -1, -15, -16, -17}; // All 8 directions
+int bishopOffsets[4] = {17, 15, -15, -17};
+int rookOffsets[4]   = {16, 1, -1, -16};   
+int queenOffsets[8]  = {17, 16, 15, 1, -1, -15, -16, -17}; 
 
 void clearBoard() {
     for (int i = 0; i < 128; i++) {
@@ -125,8 +123,60 @@ void generateMoves() {
 
         int pieceType = piece & 7; 
         
+        // --- PAWNS ---
+        if (pieceType == PAWN) {
+            if (sideToMove == WHITE) {
+                // Single Push
+                int target = square + 16;
+                if ((target & 0x88) == 0 && board[target] == EMPTY) {
+                    cout << "Pawn on " << squareToAlgebraic(square) << " pushes to " << squareToAlgebraic(target) << "\n";
+                    // Double Push (Only if on Rank 2, meaning array index is between 16 and 23)
+                    if (square >= 16 && square <= 23) {
+                        int doubleTarget = square + 32;
+                        if ((doubleTarget & 0x88) == 0 && board[doubleTarget] == EMPTY) {
+                            cout << "Pawn on " << squareToAlgebraic(square) << " double-pushes to " << squareToAlgebraic(doubleTarget) << "\n";
+                        }
+                    }
+                }
+                
+                // Captures
+                int capLeft = square + 15;
+                if ((capLeft & 0x88) == 0 && board[capLeft] != EMPTY && (board[capLeft] & BLACK)) {
+                    cout << "Pawn on " << squareToAlgebraic(square) << " captures on " << squareToAlgebraic(capLeft) << "\n";
+                }
+                int capRight = square + 17;
+                if ((capRight & 0x88) == 0 && board[capRight] != EMPTY && (board[capRight] & BLACK)) {
+                    cout << "Pawn on " << squareToAlgebraic(square) << " captures on " << squareToAlgebraic(capRight) << "\n";
+                }
+            } 
+            else { // BLACK PAWNS
+                // Single Push
+                int target = square - 16;
+                if ((target & 0x88) == 0 && board[target] == EMPTY) {
+                    cout << "Pawn on " << squareToAlgebraic(square) << " pushes to " << squareToAlgebraic(target) << "\n";
+                    // Double Push (Only if on Rank 7, meaning array index is between 96 and 103)
+                    if (square >= 96 && square <= 103) {
+                        int doubleTarget = square - 32;
+                        if ((doubleTarget & 0x88) == 0 && board[doubleTarget] == EMPTY) {
+                            cout << "Pawn on " << squareToAlgebraic(square) << " double-pushes to " << squareToAlgebraic(doubleTarget) << "\n";
+                        }
+                    }
+                }
+                
+                // Captures
+                int capLeft = square - 17;
+                if ((capLeft & 0x88) == 0 && board[capLeft] != EMPTY && (board[capLeft] & WHITE)) {
+                    cout << "Pawn on " << squareToAlgebraic(square) << " captures on " << squareToAlgebraic(capLeft) << "\n";
+                }
+                int capRight = square - 15;
+                if ((capRight & 0x88) == 0 && board[capRight] != EMPTY && (board[capRight] & WHITE)) {
+                    cout << "Pawn on " << squareToAlgebraic(square) << " captures on " << squareToAlgebraic(capRight) << "\n";
+                }
+            }
+        }
+        
         // --- LEAPERS (Knight & King) ---
-        if (pieceType == KNIGHT || pieceType == KING) {
+        else if (pieceType == KNIGHT || pieceType == KING) {
             int* offsets = (pieceType == KNIGHT) ? knightOffsets : kingOffsets;
             for (int i = 0; i < 8; i++) {
                 int target = square + offsets[i];
@@ -153,8 +203,6 @@ void generateMoves() {
 
             for (int i = 0; i < numDirections; i++) {
                 int target = square + offsets[i];
-                
-                // Keep sliding until we hit something or go off-board
                 while ((target & 0x88) == 0) {
                     int targetPiece = board[target];
                     int targetColor = targetPiece & (WHITE | BLACK);
@@ -162,15 +210,11 @@ void generateMoves() {
                     if (targetPiece == EMPTY) {
                         cout << getPieceChar(piece) << " on " << squareToAlgebraic(square) << " slides to " << squareToAlgebraic(target) << "\n";
                     } else if (targetColor != sideToMove) {
-                        // Hit an enemy: capture it, but stop sliding
                         cout << getPieceChar(piece) << " on " << squareToAlgebraic(square) << " slides to " << squareToAlgebraic(target) << " (CAPTURE)\n";
                         break;
                     } else {
-                        // Hit a friendly piece: path blocked, stop sliding
                         break;
                     }
-                    
-                    // Move one more square in the same direction
                     target += offsets[i];
                 }
             }
@@ -180,7 +224,6 @@ void generateMoves() {
 }
 
 int main() {
-    // Starting position
     parseFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     printBoard();
     printGameState();
