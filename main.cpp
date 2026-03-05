@@ -149,40 +149,65 @@ void generateMoves() {
             if (sideToMove == WHITE) {
                 int target = square + 16;
                 if ((target & 0x88) == 0 && board[target] == EMPTY) {
-                    cout << "Pawn on " << squareToAlgebraic(square) << " pushes to " << squareToAlgebraic(target) << "\n";
-                    if (square >= 16 && square <= 23) {
-                        int doubleTarget = square + 32;
-                        if ((doubleTarget & 0x88) == 0 && board[doubleTarget] == EMPTY) {
-                            cout << "Pawn on " << squareToAlgebraic(square) << " double-pushes to " << squareToAlgebraic(doubleTarget) << "\n";
+                    if (target >= 112) {
+                        cout << "Pawn on " << squareToAlgebraic(square) << " pushes to " << squareToAlgebraic(target) << " (PROMOTION)\n";
+                    } else {
+                        cout << "Pawn on " << squareToAlgebraic(square) << " pushes to " << squareToAlgebraic(target) << "\n";
+                        if (square >= 16 && square <= 23) {
+                            int doubleTarget = square + 32;
+                            if ((doubleTarget & 0x88) == 0 && board[doubleTarget] == EMPTY) {
+                                cout << "Pawn on " << squareToAlgebraic(square) << " double-pushes to " << squareToAlgebraic(doubleTarget) << "\n";
+                            }
                         }
                     }
                 }
                 int capLeft = square + 15;
-                if ((capLeft & 0x88) == 0 && board[capLeft] != EMPTY && (board[capLeft] & BLACK)) {
-                    cout << "Pawn on " << squareToAlgebraic(square) << " captures on " << squareToAlgebraic(capLeft) << "\n";
+                if ((capLeft & 0x88) == 0) {
+                    if ((board[capLeft] != EMPTY && (board[capLeft] & BLACK)) || capLeft == enPassantSquare) {
+                        string moveType = (capLeft == enPassantSquare) ? " (EN PASSANT)" : " (CAPTURE)";
+                        if (capLeft >= 112) moveType += " (PROMOTION)";
+                        cout << "Pawn on " << squareToAlgebraic(square) << " captures on " << squareToAlgebraic(capLeft) << moveType << "\n";
+                    }
                 }
                 int capRight = square + 17;
-                if ((capRight & 0x88) == 0 && board[capRight] != EMPTY && (board[capRight] & BLACK)) {
-                    cout << "Pawn on " << squareToAlgebraic(square) << " captures on " << squareToAlgebraic(capRight) << "\n";
+                if ((capRight & 0x88) == 0) {
+                    if ((board[capRight] != EMPTY && (board[capRight] & BLACK)) || capRight == enPassantSquare) {
+                        string moveType = (capRight == enPassantSquare) ? " (EN PASSANT)" : " (CAPTURE)";
+                        if (capRight >= 112) moveType += " (PROMOTION)";
+                        cout << "Pawn on " << squareToAlgebraic(square) << " captures on " << squareToAlgebraic(capRight) << moveType << "\n";
+                    }
                 }
             } else { 
+                // BLACK PAWNS
                 int target = square - 16;
                 if ((target & 0x88) == 0 && board[target] == EMPTY) {
-                    cout << "Pawn on " << squareToAlgebraic(square) << " pushes to " << squareToAlgebraic(target) << "\n";
-                    if (square >= 96 && square <= 103) {
-                        int doubleTarget = square - 32;
-                        if ((doubleTarget & 0x88) == 0 && board[doubleTarget] == EMPTY) {
-                            cout << "Pawn on " << squareToAlgebraic(square) << " double-pushes to " << squareToAlgebraic(doubleTarget) << "\n";
+                    if (target <= 7) {
+                        cout << "Pawn on " << squareToAlgebraic(square) << " pushes to " << squareToAlgebraic(target) << " (PROMOTION)\n";
+                    } else {
+                        cout << "Pawn on " << squareToAlgebraic(square) << " pushes to " << squareToAlgebraic(target) << "\n";
+                        if (square >= 96 && square <= 103) {
+                            int doubleTarget = square - 32;
+                            if ((doubleTarget & 0x88) == 0 && board[doubleTarget] == EMPTY) {
+                                cout << "Pawn on " << squareToAlgebraic(square) << " double-pushes to " << squareToAlgebraic(doubleTarget) << "\n";
+                            }
                         }
                     }
                 }
                 int capLeft = square - 17;
-                if ((capLeft & 0x88) == 0 && board[capLeft] != EMPTY && (board[capLeft] & WHITE)) {
-                    cout << "Pawn on " << squareToAlgebraic(square) << " captures on " << squareToAlgebraic(capLeft) << "\n";
+                if ((capLeft & 0x88) == 0) {
+                    if ((board[capLeft] != EMPTY && (board[capLeft] & WHITE)) || capLeft == enPassantSquare) {
+                        string moveType = (capLeft == enPassantSquare) ? " (EN PASSANT)" : " (CAPTURE)";
+                        if (capLeft <= 7) moveType += " (PROMOTION)";
+                        cout << "Pawn on " << squareToAlgebraic(square) << " captures on " << squareToAlgebraic(capLeft) << moveType << "\n";
+                    }
                 }
                 int capRight = square - 15;
-                if ((capRight & 0x88) == 0 && board[capRight] != EMPTY && (board[capRight] & WHITE)) {
-                    cout << "Pawn on " << squareToAlgebraic(square) << " captures on " << squareToAlgebraic(capRight) << "\n";
+                if ((capRight & 0x88) == 0) {
+                    if ((board[capRight] != EMPTY && (board[capRight] & WHITE)) || capRight == enPassantSquare) {
+                        string moveType = (capRight == enPassantSquare) ? " (EN PASSANT)" : " (CAPTURE)";
+                        if (capRight <= 7) moveType += " (PROMOTION)";
+                        cout << "Pawn on " << squareToAlgebraic(square) << " captures on " << squareToAlgebraic(capRight) << moveType << "\n";
+                    }
                 }
             }
         }
@@ -231,8 +256,8 @@ void generateMoves() {
 }
 
 int main() {
-    // Test string: Black's turn, missing queenside castling, en passant target on e6 (index 84)
-    parseFEN("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b Kk e6 0 1");
+    // Test string: White to move, en passant target on d6, white pawn on b7 ready to promote
+    parseFEN("rnbqkbnr/pPpp1ppp/8/3p4/4P3/8/P1PPPPPP/RNBQKBNR w KQkq d6 0 1");
     printBoard();
     printGameState();
     generateMoves();
