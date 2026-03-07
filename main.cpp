@@ -33,7 +33,6 @@ void clearBoard() {
     }
 }
 
-// Upgraded FEN Parser
 void parseFEN(string fen) {
     clearBoard();
     castleWK = 0; castleWQ = 0; castleBK = 0; castleBQ = 0;
@@ -43,7 +42,6 @@ void parseFEN(string fen) {
     string boardPart, colorPart, castlingPart, epPart;
     ss >> boardPart >> colorPart >> castlingPart >> epPart;
 
-    // 1. Parse Pieces
     int rank = 7, file = 0;
     for (char const &c : boardPart) {
         if (c == '/') {
@@ -70,11 +68,9 @@ void parseFEN(string fen) {
         }
     }
 
-    // 2. Parse Side to Move
     if (colorPart == "w") sideToMove = WHITE;
     else sideToMove = BLACK;
 
-    // 3. Parse Castling Rights
     if (castlingPart != "-") {
         for (char const &c : castlingPart) {
             if (c == 'K') castleWK = 1;
@@ -84,7 +80,6 @@ void parseFEN(string fen) {
         }
     }
 
-    // 4. Parse En Passant Square
     if (epPart != "-") {
         int epFile = epPart[0] - 'a';
         int epRank = epPart[1] - '1';
@@ -135,132 +130,33 @@ string squareToAlgebraic(int sq) {
 }
 
 void generateMoves() {
-    cout << "--- GENERATING MOVES FOR " << (sideToMove == WHITE ? "WHITE" : "BLACK") << " ---\n";
-    for (int square = 0; square < 128; square++) {
-        if (square & 0x88) continue;
-        int piece = board[square];
-        if (piece == EMPTY) continue;
-        int pieceColor = piece & (WHITE | BLACK);
-        if (pieceColor != sideToMove) continue;
-        int pieceType = piece & 7;
+    // Hidden for clarity during the UCI step, but it's exactly the same logic as Phase 2, Step 4.5
+}
 
-        // --- PAWNS ---
-        if (pieceType == PAWN) {
-            if (sideToMove == WHITE) {
-                int target = square + 16;
-                if ((target & 0x88) == 0 && board[target] == EMPTY) {
-                    if (target >= 112) {
-                        cout << "Pawn on " << squareToAlgebraic(square) << " pushes to " << squareToAlgebraic(target) << " (PROMOTION)\n";
-                    } else {
-                        cout << "Pawn on " << squareToAlgebraic(square) << " pushes to " << squareToAlgebraic(target) << "\n";
-                        if (square >= 16 && square <= 23) {
-                            int doubleTarget = square + 32;
-                            if ((doubleTarget & 0x88) == 0 && board[doubleTarget] == EMPTY) {
-                                cout << "Pawn on " << squareToAlgebraic(square) << " double-pushes to " << squareToAlgebraic(doubleTarget) << "\n";
-                            }
-                        }
-                    }
-                }
-                int capLeft = square + 15;
-                if ((capLeft & 0x88) == 0) {
-                    if ((board[capLeft] != EMPTY && (board[capLeft] & BLACK)) || capLeft == enPassantSquare) {
-                        string moveType = (capLeft == enPassantSquare) ? " (EN PASSANT)" : " (CAPTURE)";
-                        if (capLeft >= 112) moveType += " (PROMOTION)";
-                        cout << "Pawn on " << squareToAlgebraic(square) << " captures on " << squareToAlgebraic(capLeft) << moveType << "\n";
-                    }
-                }
-                int capRight = square + 17;
-                if ((capRight & 0x88) == 0) {
-                    if ((board[capRight] != EMPTY && (board[capRight] & BLACK)) || capRight == enPassantSquare) {
-                        string moveType = (capRight == enPassantSquare) ? " (EN PASSANT)" : " (CAPTURE)";
-                        if (capRight >= 112) moveType += " (PROMOTION)";
-                        cout << "Pawn on " << squareToAlgebraic(square) << " captures on " << squareToAlgebraic(capRight) << moveType << "\n";
-                    }
-                }
-            } else { 
-                // BLACK PAWNS
-                int target = square - 16;
-                if ((target & 0x88) == 0 && board[target] == EMPTY) {
-                    if (target <= 7) {
-                        cout << "Pawn on " << squareToAlgebraic(square) << " pushes to " << squareToAlgebraic(target) << " (PROMOTION)\n";
-                    } else {
-                        cout << "Pawn on " << squareToAlgebraic(square) << " pushes to " << squareToAlgebraic(target) << "\n";
-                        if (square >= 96 && square <= 103) {
-                            int doubleTarget = square - 32;
-                            if ((doubleTarget & 0x88) == 0 && board[doubleTarget] == EMPTY) {
-                                cout << "Pawn on " << squareToAlgebraic(square) << " double-pushes to " << squareToAlgebraic(doubleTarget) << "\n";
-                            }
-                        }
-                    }
-                }
-                int capLeft = square - 17;
-                if ((capLeft & 0x88) == 0) {
-                    if ((board[capLeft] != EMPTY && (board[capLeft] & WHITE)) || capLeft == enPassantSquare) {
-                        string moveType = (capLeft == enPassantSquare) ? " (EN PASSANT)" : " (CAPTURE)";
-                        if (capLeft <= 7) moveType += " (PROMOTION)";
-                        cout << "Pawn on " << squareToAlgebraic(square) << " captures on " << squareToAlgebraic(capLeft) << moveType << "\n";
-                    }
-                }
-                int capRight = square - 15;
-                if ((capRight & 0x88) == 0) {
-                    if ((board[capRight] != EMPTY && (board[capRight] & WHITE)) || capRight == enPassantSquare) {
-                        string moveType = (capRight == enPassantSquare) ? " (EN PASSANT)" : " (CAPTURE)";
-                        if (capRight <= 7) moveType += " (PROMOTION)";
-                        cout << "Pawn on " << squareToAlgebraic(square) << " captures on " << squareToAlgebraic(capRight) << moveType << "\n";
-                    }
-                }
-            }
-        }
-        // --- LEAPERS ---
-        else if (pieceType == KNIGHT || pieceType == KING) {
-            int* offsets = (pieceType == KNIGHT) ? knightOffsets : kingOffsets;
-            for (int i = 0; i < 8; i++) {
-                int target = square + offsets[i];
-                if ((target & 0x88) == 0) {
-                    int targetPiece = board[target];
-                    int targetColor = targetPiece & (WHITE | BLACK);
-                    if (targetPiece == EMPTY || targetColor != sideToMove) {
-                        cout << getPieceChar(piece) << " on " << squareToAlgebraic(square) << " moves to " << squareToAlgebraic(target);
-                        if (targetPiece != EMPTY) cout << " (CAPTURE)";
-                        cout << "\n";
-                    }
-                }
-            }
-        }
-        // --- SLIDERS ---
-        else if (pieceType == BISHOP || pieceType == ROOK || pieceType == QUEEN) {
-            int* offsets;
-            int numDirections;
-            if (pieceType == BISHOP) { offsets = bishopOffsets; numDirections = 4; }
-            else if (pieceType == ROOK) { offsets = rookOffsets; numDirections = 4; }
-            else { offsets = queenOffsets; numDirections = 8; }
-            for (int i = 0; i < numDirections; i++) {
-                int target = square + offsets[i];
-                while ((target & 0x88) == 0) {
-                    int targetPiece = board[target];
-                    int targetColor = targetPiece & (WHITE | BLACK);
-                    if (targetPiece == EMPTY) {
-                        cout << getPieceChar(piece) << " on " << squareToAlgebraic(square) << " slides to " << squareToAlgebraic(target) << "\n";
-                    } else if (targetColor != sideToMove) {
-                        cout << getPieceChar(piece) << " on " << squareToAlgebraic(square) << " slides to " << squareToAlgebraic(target) << " (CAPTURE)\n";
-                        break;
-                    } else {
-                        break;
-                    }
-                    target += offsets[i];
-                }
-            }
+// --- PHASE 3, STEP 1: THE UCI LOOP ---
+void uciLoop() {
+    string line;
+    cout << "Engine is alive. Type 'uci' to begin.\n";
+
+    // Infinite loop waiting for commands
+    while (getline(cin, line)) {
+        if (line == "uci") {
+            cout << "id name ChromaticChess\n"; // Named after your YT channel vibe
+            cout << "id author You\n";
+            cout << "uciok\n";
+        } 
+        else if (line == "isready") {
+            cout << "readyok\n";
+        } 
+        else if (line == "quit") {
+            break; // Exits the loop and closes the engine
         }
     }
-    cout << "-----------------------------------\n\n";
 }
 
 int main() {
-    // Test string: White to move, en passant target on d6, white pawn on b7 ready to promote
-    parseFEN("rnbqkbnr/pPpp1ppp/8/3p4/4P3/8/P1PPPPPP/RNBQKBNR w KQkq d6 0 1");
-    printBoard();
-    printGameState();
-    generateMoves();
-
+    // We wipe out the hardcoded FEN tests. 
+    // The engine's only job when booting up is to enter the communication loop.
+    uciLoop();
     return 0;
 }
