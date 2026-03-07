@@ -141,7 +141,7 @@ void uciLoop() {
     // Infinite loop waiting for commands
     while (getline(cin, line)) {
         if (line == "uci") {
-            cout << "id name ChromaticChess\n"; // Named after your YT channel vibe
+            cout << "id name TheGreatSage\n"; // Named after your YT channel vibe
             cout << "id author You\n";
             cout << "uciok\n";
         } 
