@@ -129,34 +129,87 @@ string squareToAlgebraic(int sq) {
     return s;
 }
 
-void generateMoves() {
-    // Hidden for clarity during the UCI step, but it's exactly the same logic as Phase 2, Step 4.5
+// --- PHASE 3, STEP 2: PARSING MOVES ---
+
+// Helper to convert "e2" into array index
+int algebraicToSquare(string alg) {
+    int file = alg[0] - 'a';
+    int rank = alg[1] - '1';
+    return rank * 16 + file;
 }
 
-// --- PHASE 3, STEP 1: THE UCI LOOP ---
+// Physically updates the C++ array based on the text move
+void makeMove(string moveStr) {
+    int src = algebraicToSquare(moveStr.substr(0, 2));
+    int tgt = algebraicToSquare(moveStr.substr(2, 2));
+    int piece = board[src];
+
+    // Handle promotions sent by GUI (e.g., e7e8q)
+    if (moveStr.length() == 5) {
+        char promo = moveStr[4];
+        int color = piece & (WHITE | BLACK);
+        if (promo == 'q') piece = color | QUEEN;
+        else if (promo == 'r') piece = color | ROOK;
+        else if (promo == 'b') piece = color | BISHOP;
+        else if (promo == 'n') piece = color | KNIGHT;
+    }
+
+    // Move the piece
+    board[tgt] = piece;
+    board[src] = EMPTY;
+
+    // Swap turns
+    sideToMove = (sideToMove == WHITE) ? BLACK : WHITE;
+}
+
+// --- PHASE 3, STEP 1 & 2: THE UCI LOOP ---
 void uciLoop() {
     string line;
     cout << "Engine is alive. Type 'uci' to begin.\n";
 
-    // Infinite loop waiting for commands
     while (getline(cin, line)) {
         if (line == "uci") {
-            cout << "id name TheGreatSage\n"; // Named after your YT channel vibe
+            cout << "id name TheGreatSage\n";
             cout << "id author You\n";
             cout << "uciok\n";
         } 
         else if (line == "isready") {
             cout << "readyok\n";
         } 
+        else if (line.substr(0, 8) == "position") {
+            // Setup the board state
+            if (line.find("startpos") != string::npos) {
+                parseFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+            } else if (line.find("fen") != string::npos) {
+                size_t fenStart = line.find("fen ") + 4;
+                size_t movesStart = line.find(" moves");
+                string fen = line.substr(fenStart, movesStart - fenStart);
+                parseFEN(fen);
+            }
+
+            // If the GUI sent a list of moves, play them on our array
+            size_t movesStart = line.find("moves ");
+            if (movesStart != string::npos) {
+                string movesStr = line.substr(movesStart + 6);
+                stringstream ss(movesStr);
+                string singleMove;
+                while (ss >> singleMove) {
+                    makeMove(singleMove);
+                }
+            }
+        }
+        else if (line == "d") {
+            // Custom debug command to see what the engine sees
+            printBoard();
+            printGameState();
+        }
         else if (line == "quit") {
-            break; // Exits the loop and closes the engine
+            break; 
         }
     }
 }
 
 int main() {
-    // We wipe out the hardcoded FEN tests. 
-    // The engine's only job when booting up is to enter the communication loop.
     uciLoop();
     return 0;
 }
