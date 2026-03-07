@@ -216,9 +216,10 @@ vector<string> generateMoves() {
 
 void uciLoop() {
     string line;
-    srand(time(0)); 
-    cout << "Engine is alive. Type 'uci' to begin." << endl;
-
+    srand(time(0)); // Seed the random number generator
+    
+    // NO GREETINGS. BE COMPLETELY SILENT UNTIL SPOKEN TO.
+    
     while (getline(cin, line)) {
         if (line == "uci") {
             cout << "id name TheGreatSage" << endl;
