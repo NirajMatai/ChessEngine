@@ -30,6 +30,31 @@ int bishopOffsets[4] = {17, 15, -15, -17};
 int rookOffsets[4]   = {16, 1, -1, -16};
 int queenOffsets[8]  = {17, 16, 15, 1, -1, -15, -16, -17};
 
+// --- PIECE-SQUARE TABLES (Phase 4, Step 2) ---
+// Bonuses for White Pawns (encourages pushing to the end)
+const int pawnTable[128] = {
+      0,  0,  0,  0,  0,  0,  0,  0,   0,0,0,0,0,0,0,0,
+     50, 50, 50, 50, 50, 50, 50, 50,   0,0,0,0,0,0,0,0,
+     10, 10, 20, 30, 30, 20, 10, 10,   0,0,0,0,0,0,0,0,
+      5,  5, 10, 25, 25, 10,  5,  5,   0,0,0,0,0,0,0,0,
+      0,  0,  0, 20, 20,  0,  0,  0,   0,0,0,0,0,0,0,0,
+      5, -5,-10,  0,  0,-10, -5,  5,   0,0,0,0,0,0,0,0,
+      5, 10, 10,-20,-20, 10, 10,  5,   0,0,0,0,0,0,0,0,
+      0,  0,  0,  0,  0,  0,  0,  0,   0,0,0,0,0,0,0,0
+};
+
+// Bonuses for Knights (encourages the center, heavily penalizes corners)
+const int knightTable[128] = {
+    -50,-40,-30,-30,-30,-30,-40,-50,   0,0,0,0,0,0,0,0,
+    -40,-20,  0,  0,  0,  0,-20,-40,   0,0,0,0,0,0,0,0,
+    -30,  0, 10, 15, 15, 10,  0,-30,   0,0,0,0,0,0,0,0,
+    -30,  5, 15, 20, 20, 15,  5,-30,   0,0,0,0,0,0,0,0,
+    -30,  0, 15, 20, 20, 15,  0,-30,   0,0,0,0,0,0,0,0,
+    -30,  5, 10, 15, 15, 10,  5,-30,   0,0,0,0,0,0,0,0,
+    -40,-20,  0,  5,  5,  0,-20,-40,   0,0,0,0,0,0,0,0,
+    -50,-40,-30,-30,-30,-30,-40,-50,   0,0,0,0,0,0,0,0
+};
+
 void clearBoard() {
     for (int i = 0; i < 128; i++) board[i] = EMPTY;
 }
@@ -62,21 +87,7 @@ void parseFEN(string fen) {
             file++;
         }
     }
-
     if (colorPart == "w") sideToMove = WHITE; else sideToMove = BLACK;
-
-    if (castlingPart != "-") {
-        for (char const &c : castlingPart) {
-            if (c == 'K') castleWK = 1; else if (c == 'Q') castleWQ = 1;
-            else if (c == 'k') castleBK = 1; else if (c == 'q') castleBQ = 1;
-        }
-    }
-
-    if (epPart != "-") {
-        int epFile = epPart[0] - 'a';
-        int epRank = epPart[1] - '1';
-        enPassantSquare = epRank * 16 + epFile;
-    }
 }
 
 char getPieceChar(int piece) {
@@ -96,9 +107,7 @@ void printBoard() {
     cout << "\n  a b c d e f g h\n\n";
     for (int rank = 7; rank >= 0; rank--) {
         cout << rank + 1 << " ";
-        for (int file = 0; file < 8; file++) {
-            cout << getPieceChar(board[rank * 16 + file]) << " ";
-        }
+        for (int file = 0; file < 8; file++) cout << getPieceChar(board[rank * 16 + file]) << " ";
         cout << rank + 1 << "\n";
     }
     cout << "\n  a b c d e f g h\n\n";
@@ -106,9 +115,6 @@ void printBoard() {
 
 void printGameState() {
     cout << "Side to move: " << (sideToMove == WHITE ? "White" : "Black") << endl;
-    cout << "En Passant Square: " << (enPassantSquare == -1 ? "None" : to_string(enPassantSquare)) << endl;
-    cout << "Castling Rights: " << (castleWK ? "K" : "-") << (castleWQ ? "Q" : "-") 
-         << (castleBK ? "k" : "-") << (castleBQ ? "q" : "-") << endl << endl;
 }
 
 string squareToAlgebraic(int sq) {
@@ -145,11 +151,11 @@ void makeMove(string moveStr) {
     sideToMove = (sideToMove == WHITE) ? BLACK : WHITE;
 }
 
-// --- PHASE 4, STEP 1: THE EVALUATION FUNCTION ---
+// --- UPGRADED EVALUATION FUNCTION ---
 int evaluate() {
     int score = 0;
     for (int square = 0; square < 128; square++) {
-        if (square & 0x88) continue; // Skip the ghost zone
+        if (square & 0x88) continue; 
         int piece = board[square];
         if (piece == EMPTY) continue;
 
@@ -157,15 +163,16 @@ int evaluate() {
         int pieceColor = piece & (WHITE | BLACK);
         int value = 0;
 
-        // Assign centipawn values
-        if (pieceType == PAWN) value = 100;
-        else if (pieceType == KNIGHT) value = 300;
-        else if (pieceType == BISHOP) value = 300;
+        // If Black, flip the square index upside down (0x70 is 112)
+        int pstSquare = (pieceColor == WHITE) ? square : square ^ 0x70;
+
+        // Add base material value + positional bonus from the table
+        if (pieceType == PAWN) value = 100 + pawnTable[pstSquare];
+        else if (pieceType == KNIGHT) value = 300 + knightTable[pstSquare];
+        else if (pieceType == BISHOP) value = 300; // You can add a bishop table later
         else if (pieceType == ROOK) value = 500;
         else if (pieceType == QUEEN) value = 900;
-        // Kings are essentially infinite value, so we don't score them here yet.
 
-        // Add if White, subtract if Black
         if (pieceColor == WHITE) score += value;
         else score -= value;
     }
@@ -174,7 +181,6 @@ int evaluate() {
 
 vector<string> generateMoves() {
     vector<string> moves;
-
     for (int square = 0; square < 128; square++) {
         if (square & 0x88) continue;
         int piece = board[square];
@@ -280,9 +286,7 @@ void uciLoop() {
         }
         else if (line == "d") {
             printBoard();
-            printGameState();
         }
-        // --- NEW DEBUG COMMAND ---
         else if (line == "eval") {
             int score = evaluate();
             cout << "Current evaluation: " << score << " centipawns\n";
