@@ -145,8 +145,33 @@ void makeMove(string moveStr) {
     sideToMove = (sideToMove == WHITE) ? BLACK : WHITE;
 }
 
-// --- PHASE 3, STEP 3: THE RANDOM MOVER ---
-// Instead of void, it now returns a list of UCI move strings
+// --- PHASE 4, STEP 1: THE EVALUATION FUNCTION ---
+int evaluate() {
+    int score = 0;
+    for (int square = 0; square < 128; square++) {
+        if (square & 0x88) continue; // Skip the ghost zone
+        int piece = board[square];
+        if (piece == EMPTY) continue;
+
+        int pieceType = piece & 7;
+        int pieceColor = piece & (WHITE | BLACK);
+        int value = 0;
+
+        // Assign centipawn values
+        if (pieceType == PAWN) value = 100;
+        else if (pieceType == KNIGHT) value = 300;
+        else if (pieceType == BISHOP) value = 300;
+        else if (pieceType == ROOK) value = 500;
+        else if (pieceType == QUEEN) value = 900;
+        // Kings are essentially infinite value, so we don't score them here yet.
+
+        // Add if White, subtract if Black
+        if (pieceColor == WHITE) score += value;
+        else score -= value;
+    }
+    return score;
+}
+
 vector<string> generateMoves() {
     vector<string> moves;
 
@@ -158,7 +183,6 @@ vector<string> generateMoves() {
         if (pieceColor != sideToMove) continue;
         int pieceType = piece & 7;
 
-        // A quick lambda helper to build the UCI string and auto-promote to Queen
         auto addMove = [&](int targetSquare) {
             string m = squareToAlgebraic(square) + squareToAlgebraic(targetSquare);
             if (pieceType == PAWN && (targetSquare >= 112 || targetSquare <= 7)) m += "q";
@@ -216,18 +240,16 @@ vector<string> generateMoves() {
 
 void uciLoop() {
     string line;
-    srand(time(0)); // Seed the random number generator
-    
-    // NO GREETINGS. BE COMPLETELY SILENT UNTIL SPOKEN TO.
-    
+    srand(time(0)); 
+
     while (getline(cin, line)) {
         if (line == "uci") {
-            cout << "id name TheGreatSage" << endl;
-            cout << "id author You" << endl;
-            cout << "uciok" << endl;
+            cout << "id name TheGreatSage\n";
+            cout << "id author You\n";
+            cout << "uciok\n";
         } 
         else if (line == "isready") {
-            cout << "readyok" << endl;
+            cout << "readyok\n";
         } 
         else if (line.substr(0, 8) == "position") {
             if (line.find("startpos") != string::npos) {
@@ -251,14 +273,19 @@ void uciLoop() {
             vector<string> moves = generateMoves();
             if (moves.size() > 0) {
                 int randomIndex = rand() % moves.size();
-                cout << "bestmove " << moves[randomIndex] << endl;
+                cout << "bestmove " << moves[randomIndex] << "\n";
             } else {
-                cout << "bestmove 0000" << endl; 
+                cout << "bestmove 0000\n"; 
             }
         }
         else if (line == "d") {
             printBoard();
             printGameState();
+        }
+        // --- NEW DEBUG COMMAND ---
+        else if (line == "eval") {
+            int score = evaluate();
+            cout << "Current evaluation: " << score << " centipawns\n";
         }
         else if (line == "quit") {
             break; 
@@ -267,7 +294,6 @@ void uciLoop() {
 }
 
 int main() {
-    // Force standard output to not buffer at all, just to be bulletproof
     setvbuf(stdout, NULL, _IONBF, 0); 
     uciLoop();
     return 0;
