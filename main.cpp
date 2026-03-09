@@ -239,50 +239,57 @@ vector<string> generateMoves() {
     return moves;
 }
 
-// --- PHASE 4, STEP 3: THE MINIMAX ALGORITHM ---
-int search(int depth, bool isMaximizing) {
+// --- PHASE 4, STEP 4: ALPHA-BETA PRUNING ---
+int search(int depth, int alpha, int beta, bool isMaximizing) {
     if (depth == 0) return evaluate();
 
     vector<string> moves = generateMoves();
     if (moves.empty()) {
-        // If no moves, pretend it's terrible for the side to move
         return isMaximizing ? -10000 : 10000;
     }
 
     if (isMaximizing) {
-        int bestScore = -100000; // Start with lowest possible score
+        int bestScore = -100000; 
         for (string move : moves) {
-            // BACKUP STATE
+            // BACKUP
             int backupBoard[128];
             for(int i=0; i<128; i++) backupBoard[i] = board[i];
             int backupSide = sideToMove;
 
             makeMove(move);
-            int score = search(depth - 1, false);
+            int score = search(depth - 1, alpha, beta, false);
 
-            // RESTORE STATE
+            // RESTORE
             for(int i=0; i<128; i++) board[i] = backupBoard[i];
             sideToMove = backupSide;
 
             if (score > bestScore) bestScore = score;
+            if (bestScore > alpha) alpha = bestScore;
+            
+            // THE PRUNE
+            if (beta <= alpha) break; 
         }
         return bestScore;
     } else {
-        int bestScore = 100000; // Start with highest possible score
+        int bestScore = 100000; 
         for (string move : moves) {
-            // BACKUP STATE
+            // BACKUP
             int backupBoard[128];
             for(int i=0; i<128; i++) backupBoard[i] = board[i];
             int backupSide = sideToMove;
 
             makeMove(move);
-            int score = search(depth - 1, true);
+            int score = search(depth - 1, alpha, beta, true);
 
-            // RESTORE STATE
+            // RESTORE
             for(int i=0; i<128; i++) board[i] = backupBoard[i];
             sideToMove = backupSide;
 
             if (score < bestScore) bestScore = score;
+            if (bestScore < beta) beta = bestScore;
+            
+            // THE PRUNE
+            if (beta <= alpha) break; 
         }
         return bestScore;
     }
@@ -294,30 +301,40 @@ string getBestMove(int depth) {
 
     string bestMove = moves[0];
     bool isMaximizing = (sideToMove == WHITE);
+    
     int bestScore = isMaximizing ? -100000 : 100000;
+    int alpha = -100000;
+    int beta = 100000;
 
     for (string move : moves) {
-        // BACKUP STATE
+        // BACKUP
         int backupBoard[128];
         for(int i=0; i<128; i++) backupBoard[i] = board[i];
         int backupSide = sideToMove;
 
         makeMove(move);
-        int score = search(depth - 1, !isMaximizing);
+        int score = search(depth - 1, alpha, beta, !isMaximizing);
 
-        // RESTORE STATE
+        // RESTORE
         for(int i=0; i<128; i++) board[i] = backupBoard[i];
         sideToMove = backupSide;
 
         if (isMaximizing) {
-            if (score > bestScore) { bestScore = score; bestMove = move; }
+            if (score > bestScore) { 
+                bestScore = score; 
+                bestMove = move; 
+            }
+            if (bestScore > alpha) alpha = bestScore;
         } else {
-            if (score < bestScore) { bestScore = score; bestMove = move; }
+            if (score < bestScore) { 
+                bestScore = score; 
+                bestMove = move; 
+            }
+            if (bestScore < beta) beta = bestScore;
         }
     }
     return bestMove;
 }
-
 void uciLoop() {
     string line;
     srand(time(0)); 
