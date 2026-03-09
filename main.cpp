@@ -30,8 +30,7 @@ int bishopOffsets[4] = {17, 15, -15, -17};
 int rookOffsets[4]   = {16, 1, -1, -16};
 int queenOffsets[8]  = {17, 16, 15, 1, -1, -15, -16, -17};
 
-// --- PIECE-SQUARE TABLES (Phase 4, Step 2) ---
-// Bonuses for White Pawns (encourages pushing to the end)
+// --- PIECE-SQUARE TABLES ---
 const int pawnTable[128] = {
       0,  0,  0,  0,  0,  0,  0,  0,   0,0,0,0,0,0,0,0,
      50, 50, 50, 50, 50, 50, 50, 50,   0,0,0,0,0,0,0,0,
@@ -43,7 +42,6 @@ const int pawnTable[128] = {
       0,  0,  0,  0,  0,  0,  0,  0,   0,0,0,0,0,0,0,0
 };
 
-// Bonuses for Knights (encourages the center, heavily penalizes corners)
 const int knightTable[128] = {
     -50,-40,-30,-30,-30,-30,-40,-50,   0,0,0,0,0,0,0,0,
     -40,-20,  0,  0,  0,  0,-20,-40,   0,0,0,0,0,0,0,0,
@@ -151,7 +149,6 @@ void makeMove(string moveStr) {
     sideToMove = (sideToMove == WHITE) ? BLACK : WHITE;
 }
 
-// --- UPGRADED EVALUATION FUNCTION ---
 int evaluate() {
     int score = 0;
     for (int square = 0; square < 128; square++) {
@@ -163,13 +160,11 @@ int evaluate() {
         int pieceColor = piece & (WHITE | BLACK);
         int value = 0;
 
-        // If Black, flip the square index upside down (0x70 is 112)
         int pstSquare = (pieceColor == WHITE) ? square : square ^ 0x70;
 
-        // Add base material value + positional bonus from the table
         if (pieceType == PAWN) value = 100 + pawnTable[pstSquare];
         else if (pieceType == KNIGHT) value = 300 + knightTable[pstSquare];
-        else if (pieceType == BISHOP) value = 300; // You can add a bishop table later
+        else if (pieceType == BISHOP) value = 300; 
         else if (pieceType == ROOK) value = 500;
         else if (pieceType == QUEEN) value = 900;
 
@@ -244,6 +239,85 @@ vector<string> generateMoves() {
     return moves;
 }
 
+// --- PHASE 4, STEP 3: THE MINIMAX ALGORITHM ---
+int search(int depth, bool isMaximizing) {
+    if (depth == 0) return evaluate();
+
+    vector<string> moves = generateMoves();
+    if (moves.empty()) {
+        // If no moves, pretend it's terrible for the side to move
+        return isMaximizing ? -10000 : 10000;
+    }
+
+    if (isMaximizing) {
+        int bestScore = -100000; // Start with lowest possible score
+        for (string move : moves) {
+            // BACKUP STATE
+            int backupBoard[128];
+            for(int i=0; i<128; i++) backupBoard[i] = board[i];
+            int backupSide = sideToMove;
+
+            makeMove(move);
+            int score = search(depth - 1, false);
+
+            // RESTORE STATE
+            for(int i=0; i<128; i++) board[i] = backupBoard[i];
+            sideToMove = backupSide;
+
+            if (score > bestScore) bestScore = score;
+        }
+        return bestScore;
+    } else {
+        int bestScore = 100000; // Start with highest possible score
+        for (string move : moves) {
+            // BACKUP STATE
+            int backupBoard[128];
+            for(int i=0; i<128; i++) backupBoard[i] = board[i];
+            int backupSide = sideToMove;
+
+            makeMove(move);
+            int score = search(depth - 1, true);
+
+            // RESTORE STATE
+            for(int i=0; i<128; i++) board[i] = backupBoard[i];
+            sideToMove = backupSide;
+
+            if (score < bestScore) bestScore = score;
+        }
+        return bestScore;
+    }
+}
+
+string getBestMove(int depth) {
+    vector<string> moves = generateMoves();
+    if (moves.empty()) return "0000";
+
+    string bestMove = moves[0];
+    bool isMaximizing = (sideToMove == WHITE);
+    int bestScore = isMaximizing ? -100000 : 100000;
+
+    for (string move : moves) {
+        // BACKUP STATE
+        int backupBoard[128];
+        for(int i=0; i<128; i++) backupBoard[i] = board[i];
+        int backupSide = sideToMove;
+
+        makeMove(move);
+        int score = search(depth - 1, !isMaximizing);
+
+        // RESTORE STATE
+        for(int i=0; i<128; i++) board[i] = backupBoard[i];
+        sideToMove = backupSide;
+
+        if (isMaximizing) {
+            if (score > bestScore) { bestScore = score; bestMove = move; }
+        } else {
+            if (score < bestScore) { bestScore = score; bestMove = move; }
+        }
+    }
+    return bestMove;
+}
+
 void uciLoop() {
     string line;
     srand(time(0)); 
@@ -276,13 +350,9 @@ void uciLoop() {
             }
         }
         else if (line.substr(0, 2) == "go") {
-            vector<string> moves = generateMoves();
-            if (moves.size() > 0) {
-                int randomIndex = rand() % moves.size();
-                cout << "bestmove " << moves[randomIndex] << "\n";
-            } else {
-                cout << "bestmove 0000\n"; 
-            }
+            // We now call the new brain to search 3 moves deep instead of picking randomly!
+            string bestMove = getBestMove(3);
+            cout << "bestmove " << bestMove << "\n";
         }
         else if (line == "d") {
             printBoard();
