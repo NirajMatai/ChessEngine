@@ -174,6 +174,57 @@ int evaluate() {
     return score;
 }
 
+// Check if a square is attacked by a given color
+bool isSquareAttacked(int square, int attackerColor) {
+    // 1. Check for Pawn attacks
+    if (attackerColor == WHITE) {
+        if (!((square - 17) & 0x88) && board[square - 17] == (WHITE | PAWN)) return true;
+        if (!((square - 15) & 0x88) && board[square - 15] == (WHITE | PAWN)) return true;
+    } else {
+        if (!((square + 17) & 0x88) && board[square + 17] == (BLACK | PAWN)) return true;
+        if (!((square + 15) & 0x88) && board[square + 15] == (BLACK | PAWN)) return true;
+    }
+
+    // 2. Check for Knight attacks
+    for (int i = 0; i < 8; i++) {
+        int target = square + knightOffsets[i];
+        if (!(target & 0x88) && board[target] == (attackerColor | KNIGHT)) return true;
+    }
+
+    // 3. Check for King attacks (King can't move next to another King)
+    for (int i = 0; i < 8; i++) {
+        int target = square + kingOffsets[i];
+        if (!(target & 0x88) && board[target] == (attackerColor | KING)) return true;
+    }
+
+    // 4. Check for Bishop/Queen attacks (Diagonals)
+    for (int i = 0; i < 4; i++) {
+        int target = square + bishopOffsets[i];
+        while (!(target & 0x88)) {
+            int piece = board[target];
+            if (piece != EMPTY) {
+                if (piece == (attackerColor | BISHOP) || piece == (attackerColor | QUEEN)) return true;
+                break; // Path blocked
+            }
+            target += bishopOffsets[i];
+        }
+    }
+
+    // 5. Check for Rook/Queen attacks (Vertical/Horizontal)
+    for (int i = 0; i < 4; i++) {
+        int target = square + rookOffsets[i];
+        while (!(target & 0x88)) {
+            int piece = board[target];
+            if (piece != EMPTY) {
+                if (piece == (attackerColor | ROOK) || piece == (attackerColor | QUEEN)) return true;
+                break; // Path blocked
+            }
+            target += rookOffsets[i];
+        }
+    }
+
+    return false;
+}
 vector<string> generateMoves() {
     vector<string> moves;
     for (int square = 0; square < 128; square++) {
@@ -239,97 +290,110 @@ vector<string> generateMoves() {
     return moves;
 }
 
-// --- PHASE 4, STEP 4: ALPHA-BETA PRUNING ---
 int search(int depth, int alpha, int beta, bool isMaximizing) {
     if (depth == 0) return evaluate();
 
     vector<string> moves = generateMoves();
-    if (moves.empty()) {
-        return isMaximizing ? -10000 : 10000;
-    }
-
-    if (isMaximizing) {
-        int bestScore = -100000; 
-        for (string move : moves) {
-            // BACKUP
-            int backupBoard[128];
-            for(int i=0; i<128; i++) backupBoard[i] = board[i];
-            int backupSide = sideToMove;
-
-            makeMove(move);
-            int score = search(depth - 1, alpha, beta, false);
-
-            // RESTORE
-            for(int i=0; i<128; i++) board[i] = backupBoard[i];
-            sideToMove = backupSide;
-
-            if (score > bestScore) bestScore = score;
-            if (bestScore > alpha) alpha = bestScore;
-            
-            // THE PRUNE
-            if (beta <= alpha) break; 
-        }
-        return bestScore;
-    } else {
-        int bestScore = 100000; 
-        for (string move : moves) {
-            // BACKUP
-            int backupBoard[128];
-            for(int i=0; i<128; i++) backupBoard[i] = board[i];
-            int backupSide = sideToMove;
-
-            makeMove(move);
-            int score = search(depth - 1, alpha, beta, true);
-
-            // RESTORE
-            for(int i=0; i<128; i++) board[i] = backupBoard[i];
-            sideToMove = backupSide;
-
-            if (score < bestScore) bestScore = score;
-            if (bestScore < beta) beta = bestScore;
-            
-            // THE PRUNE
-            if (beta <= alpha) break; 
-        }
-        return bestScore;
-    }
-}
-
-string getBestMove(int depth) {
-    vector<string> moves = generateMoves();
-    if (moves.empty()) return "0000";
-
-    string bestMove = moves[0];
-    bool isMaximizing = (sideToMove == WHITE);
-    
+    int legalMovesCount = 0;
     int bestScore = isMaximizing ? -100000 : 100000;
-    int alpha = -100000;
-    int beta = 100000;
 
     for (string move : moves) {
-        // BACKUP
+        // BACKUP STATE
         int backupBoard[128];
         for(int i=0; i<128; i++) backupBoard[i] = board[i];
         int backupSide = sideToMove;
 
         makeMove(move);
+
+        // --- THE LEGALITY CHECK ---
+        // After making the move, where is the King of the side who JUST moved?
+        int kingSide = backupSide;
+        int kingSq = -1;
+        for (int i = 0; i < 128; i++) {
+            if (!(i & 0x88) && board[i] == (kingSide | KING)) {
+                kingSq = i;
+                break;
+            }
+        }
+
+        // If our King is being attacked, this move was illegal!
+        if (isSquareAttacked(kingSq, kingSide == WHITE ? BLACK : WHITE)) {
+            for(int i=0; i<128; i++) board[i] = backupBoard[i];
+            sideToMove = backupSide;
+            continue;
+        }
+
+        legalMovesCount++;
         int score = search(depth - 1, alpha, beta, !isMaximizing);
 
-        // RESTORE
+        // RESTORE STATE
         for(int i=0; i<128; i++) board[i] = backupBoard[i];
         sideToMove = backupSide;
 
         if (isMaximizing) {
-            if (score > bestScore) { 
-                bestScore = score; 
-                bestMove = move; 
-            }
+            if (score > bestScore) bestScore = score;
             if (bestScore > alpha) alpha = bestScore;
         } else {
-            if (score < bestScore) { 
-                bestScore = score; 
-                bestMove = move; 
-            }
+            if (score < bestScore) bestScore = score;
+            if (bestScore < beta) beta = bestScore;
+        }
+
+        if (beta <= alpha) break; // Alpha-Beta Pruning
+    }
+
+    // If no legal moves are found, it's either Checkmate or Stalemate
+    if (legalMovesCount == 0) {
+        // Find if King is currently in check
+        int kingSq = -1;
+        for (int i = 0; i < 128; i++) {
+            if (!(i & 0x88) && board[i] == (sideToMove | KING)) { kingSq = i; break; }
+        }
+        if (isSquareAttacked(kingSq, sideToMove == WHITE ? BLACK : WHITE)) 
+            return isMaximizing ? -10000 : 10000; // Checkmate
+        else 
+            return 0; // Stalemate
+    }
+
+    return bestScore;
+}
+
+string getBestMove(int depth) {
+    vector<string> moves = generateMoves();
+    string bestMove = "0000";
+    bool isMaximizing = (sideToMove == WHITE);
+    int bestScore = isMaximizing ? -100000 : 100000;
+    int alpha = -100000;
+    int beta = 100000;
+
+    for (string move : moves) {
+        int backupBoard[128];
+        for(int i=0; i<128; i++) backupBoard[i] = board[i];
+        int backupSide = sideToMove;
+
+        makeMove(move);
+
+        // Check if move is legal
+        int kingSq = -1;
+        for (int i = 0; i < 128; i++) {
+            if (!(i & 0x88) && board[i] == (backupSide | KING)) { kingSq = i; break; }
+        }
+
+        if (isSquareAttacked(kingSq, backupSide == WHITE ? BLACK : WHITE)) {
+            for(int i=0; i<128; i++) board[i] = backupBoard[i];
+            sideToMove = backupSide;
+            continue;
+        }
+
+        int score = search(depth - 1, alpha, beta, !isMaximizing);
+
+        for(int i=0; i<128; i++) board[i] = backupBoard[i];
+        sideToMove = backupSide;
+
+        if (isMaximizing) {
+            if (score > bestScore) { bestScore = score; bestMove = move; }
+            if (bestScore > alpha) alpha = bestScore;
+        } else {
+            if (score < bestScore) { bestScore = score; bestMove = move; }
             if (bestScore < beta) beta = bestScore;
         }
     }
