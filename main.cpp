@@ -30,28 +30,27 @@ int bishopOffsets[4] = {17, 15, -15, -17};
 int rookOffsets[4]   = {16, 1, -1, -16};
 int queenOffsets[8]  = {17, 16, 15, 1, -1, -15, -16, -17};
 
-// --- CORRECTED PIECE-SQUARE TABLES ---
-// Right-side up for 0x88 (Index 0 is a1)
+// --- CORRECTED PIECE-SQUARE TABLES (Right-side up for 0x88) ---
 const int pawnTable[128] = {
-     0,  0,  0,  0,  0,  0,  0,  0,   0,0,0,0,0,0,0,0, // Rank 1
-     5, 10, 10,-20,-20, 10, 10,  5,   0,0,0,0,0,0,0,0, // Rank 2
-     5, -5,-10,  0,  0,-10, -5,  5,   0,0,0,0,0,0,0,0, // Rank 3
-     0,  0,  0, 20, 20,  0,  0,  0,   0,0,0,0,0,0,0,0, // Rank 4
-     5,  5, 10, 25, 25, 10,  5,  5,   0,0,0,0,0,0,0,0, // Rank 5
-    10, 10, 20, 30, 30, 20, 10, 10,   0,0,0,0,0,0,0,0, // Rank 6
-    50, 50, 50, 50, 50, 50, 50, 50,   0,0,0,0,0,0,0,0, // Rank 7
-     0,  0,  0,  0,  0,  0,  0,  0,   0,0,0,0,0,0,0,0  // Rank 8
+     0,  0,  0,  0,  0,  0,  0,  0,   0,0,0,0,0,0,0,0,
+     5, 10, 10,-20,-20, 10, 10,  5,   0,0,0,0,0,0,0,0,
+     5, -5,-10,  0,  0,-10, -5,  5,   0,0,0,0,0,0,0,0,
+     0,  0,  0, 20, 20,  0,  0,  0,   0,0,0,0,0,0,0,0,
+     5,  5, 10, 25, 25, 10,  5,  5,   0,0,0,0,0,0,0,0,
+    10, 10, 20, 30, 30, 20, 10, 10,   0,0,0,0,0,0,0,0,
+    50, 50, 50, 50, 50, 50, 50, 50,   0,0,0,0,0,0,0,0,
+     0,  0,  0,  0,  0,  0,  0,  0,   0,0,0,0,0,0,0,0
 };
 
 const int knightTable[128] = {
-    -50,-40,-30,-30,-30,-30,-40,-50,   0,0,0,0,0,0,0,0, // Rank 1
-    -40,-20,  0,  5,  5,  0,-20,-40,   0,0,0,0,0,0,0,0, // Rank 2
-    -30,  5, 10, 15, 15, 10,  5,-30,   0,0,0,0,0,0,0,0, // Rank 3
-    -30,  0, 15, 20, 20, 15,  0,-30,   0,0,0,0,0,0,0,0, // Rank 4
-    -30,  5, 15, 20, 20, 15,  5,-30,   0,0,0,0,0,0,0,0, // Rank 5
-    -30,  0, 10, 15, 15, 10,  0,-30,   0,0,0,0,0,0,0,0, // Rank 6
-    -40,-20,  0,  0,  0,  0,-20,-40,   0,0,0,0,0,0,0,0, // Rank 7
-    -50,-40,-30,-30,-30,-30,-40,-50,   0,0,0,0,0,0,0,0  // Rank 8
+    -50,-40,-30,-30,-30,-30,-40,-50,   0,0,0,0,0,0,0,0,
+    -40,-20,  0,  5,  5,  0,-20,-40,   0,0,0,0,0,0,0,0,
+    -30,  5, 10, 15, 15, 10,  5,-30,   0,0,0,0,0,0,0,0,
+    -30,  0, 15, 20, 20, 15,  0,-30,   0,0,0,0,0,0,0,0,
+    -30,  5, 15, 20, 20, 15,  5,-30,   0,0,0,0,0,0,0,0,
+    -30,  0, 10, 15, 15, 10,  0,-30,   0,0,0,0,0,0,0,0,
+    -40,-20,  0,  0,  0,  0,-20,-40,   0,0,0,0,0,0,0,0,
+    -50,-40,-30,-30,-30,-30,-40,-50,   0,0,0,0,0,0,0,0
 };
 
 void clearBoard() {
@@ -87,6 +86,14 @@ void parseFEN(string fen) {
         }
     }
     if (colorPart == "w") sideToMove = WHITE; else sideToMove = BLACK;
+
+    // Actually set castling rights from FEN
+    if (castlingPart != "-") {
+        if (castlingPart.find('K') != string::npos) castleWK = 1;
+        if (castlingPart.find('Q') != string::npos) castleWQ = 1;
+        if (castlingPart.find('k') != string::npos) castleBK = 1;
+        if (castlingPart.find('q') != string::npos) castleBQ = 1;
+    }
 }
 
 char getPieceChar(int piece) {
@@ -112,10 +119,6 @@ void printBoard() {
     cout << "\n  a b c d e f g h\n\n";
 }
 
-void printGameState() {
-    cout << "Side to move: " << (sideToMove == WHITE ? "White" : "Black") << endl;
-}
-
 string squareToAlgebraic(int sq) {
     int rank = sq / 16;
     int file = sq % 16;
@@ -137,21 +140,48 @@ void makeMove(string moveStr) {
     int piece = board[src];
     int pieceType = piece & 7;
 
-    // 1. Handle En Passant Captures 
+    // 1. Handle Castling (Teleport the Rook if King moves 2 squares)
+    if (pieceType == KING && abs(tgt - src) == 2) {
+        if (tgt == src + 2) { // Kingside
+            board[tgt - 1] = board[src + 3];
+            board[src + 3] = EMPTY;
+        } else if (tgt == src - 2) { // Queenside
+            board[tgt + 1] = board[src - 4];
+            board[src - 4] = EMPTY;
+        }
+    }
+
+    // 2. Handle En Passant Captures
     if (pieceType == PAWN && tgt == enPassantSquare) {
         if (sideToMove == WHITE) board[tgt - 16] = EMPTY;
         else board[tgt + 16] = EMPTY;
     }
 
-    // 2. Reset En Passant square for the next turn
+    // 3. Reset En Passant square for the next turn
     enPassantSquare = -1;
 
-    // 3. Set a new En Passant square if a pawn double-pushes
+    // 4. Set a new En Passant square if a pawn double-pushes
     if (pieceType == PAWN && abs(tgt - src) == 32) {
         enPassantSquare = (sideToMove == WHITE) ? src + 16 : src - 16;
     }
 
-    // 4. Handle Promotions
+    // 5. Update Castling Rights if King or Rook moves/is captured
+    if (pieceType == KING) {
+        if (sideToMove == WHITE) { castleWK = 0; castleWQ = 0; }
+        else { castleBK = 0; castleBQ = 0; }
+    }
+    if (pieceType == ROOK) {
+        if (src == 7) castleWK = 0;
+        else if (src == 0) castleWQ = 0;
+        else if (src == 119) castleBK = 0;
+        else if (src == 112) castleBQ = 0;
+    }
+    if (tgt == 7) castleWK = 0;
+    else if (tgt == 0) castleWQ = 0;
+    else if (tgt == 119) castleBK = 0;
+    else if (tgt == 112) castleBQ = 0;
+
+    // 6. Handle Promotions
     if (moveStr.length() == 5) {
         char promo = moveStr[4];
         int color = piece & (WHITE | BLACK);
@@ -161,7 +191,7 @@ void makeMove(string moveStr) {
         else if (promo == 'n') piece = color | KNIGHT;
     }
 
-    // 5. Execute the move on the array
+    // 7. Execute the move on the array
     board[tgt] = piece;
     board[src] = EMPTY;
     sideToMove = (sideToMove == WHITE) ? BLACK : WHITE;
@@ -281,6 +311,25 @@ vector<string> generateMoves() {
                     if (board[target] == EMPTY || targetColor != sideToMove) addMove(target);
                 }
             }
+            
+            // --- CASTLING GENERATION ---
+            if (pieceType == KING) {
+                if (sideToMove == WHITE && square == 4) { 
+                    if (castleWK && board[5] == EMPTY && board[6] == EMPTY) {
+                        if (!isSquareAttacked(4, BLACK) && !isSquareAttacked(5, BLACK) && !isSquareAttacked(6, BLACK)) addMove(6); 
+                    }
+                    if (castleWQ && board[3] == EMPTY && board[2] == EMPTY && board[1] == EMPTY) {
+                        if (!isSquareAttacked(4, BLACK) && !isSquareAttacked(3, BLACK) && !isSquareAttacked(2, BLACK)) addMove(2); 
+                    }
+                } else if (sideToMove == BLACK && square == 116) { 
+                    if (castleBK && board[117] == EMPTY && board[118] == EMPTY) {
+                        if (!isSquareAttacked(116, WHITE) && !isSquareAttacked(117, WHITE) && !isSquareAttacked(118, WHITE)) addMove(118); 
+                    }
+                    if (castleBQ && board[115] == EMPTY && board[114] == EMPTY && board[113] == EMPTY) {
+                        if (!isSquareAttacked(116, WHITE) && !isSquareAttacked(115, WHITE) && !isSquareAttacked(114, WHITE)) addMove(114); 
+                    }
+                }
+            }
         }
         else if (pieceType == BISHOP || pieceType == ROOK || pieceType == QUEEN) {
             int* offsets; int numDirections;
@@ -310,7 +359,6 @@ int search(int depth, int alpha, int beta, bool isMaximizing) {
     int bestScore = isMaximizing ? -100000 : 100000;
 
     for (string move : moves) {
-        // --- COMPLETE STATE BACKUP ---
         int backupBoard[128];
         for(int i=0; i<128; i++) backupBoard[i] = board[i];
         int backupSide = sideToMove;
@@ -322,14 +370,10 @@ int search(int depth, int alpha, int beta, bool isMaximizing) {
         int kingSide = backupSide;
         int kingSq = -1;
         for (int i = 0; i < 128; i++) {
-            if (!(i & 0x88) && board[i] == (kingSide | KING)) {
-                kingSq = i;
-                break;
-            }
+            if (!(i & 0x88) && board[i] == (kingSide | KING)) { kingSq = i; break; }
         }
 
         if (isSquareAttacked(kingSq, kingSide == WHITE ? BLACK : WHITE)) {
-            // RESTORE ON ILLEGAL MOVE
             for(int i=0; i<128; i++) board[i] = backupBoard[i];
             sideToMove = backupSide;
             enPassantSquare = backupEP;
@@ -340,7 +384,6 @@ int search(int depth, int alpha, int beta, bool isMaximizing) {
         legalMovesCount++;
         int score = search(depth - 1, alpha, beta, !isMaximizing);
 
-        // --- COMPLETE STATE RESTORE ---
         for(int i=0; i<128; i++) board[i] = backupBoard[i];
         sideToMove = backupSide;
         enPassantSquare = backupEP;
@@ -354,7 +397,7 @@ int search(int depth, int alpha, int beta, bool isMaximizing) {
             if (bestScore < beta) beta = bestScore;
         }
 
-        if (beta <= alpha) break; // Alpha-Beta Pruning
+        if (beta <= alpha) break; 
     }
 
     if (legalMovesCount == 0) {
@@ -362,8 +405,9 @@ int search(int depth, int alpha, int beta, bool isMaximizing) {
         for (int i = 0; i < 128; i++) {
             if (!(i & 0x88) && board[i] == (sideToMove | KING)) { kingSq = i; break; }
         }
+        // Depth penalty so the bot aggressively finishes the game
         if (isSquareAttacked(kingSq, sideToMove == WHITE ? BLACK : WHITE)) 
-            return isMaximizing ? -10000 : 10000; 
+            return isMaximizing ? -10000 - depth : 10000 + depth; 
         else 
             return 0; 
     }
@@ -400,6 +444,9 @@ string getBestMove(int depth) {
             castleWK = backupCWK; castleWQ = backupCWQ; castleBK = backupCBK; castleBQ = backupCBQ;
             continue;
         }
+
+        // Safety Net: Lock in the first legal move so we NEVER output 0000
+        if (bestMove == "0000") bestMove = move;
 
         int score = search(depth - 1, alpha, beta, !isMaximizing);
 
