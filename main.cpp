@@ -4,7 +4,9 @@
 #include <vector>
 #include <cstdlib>
 #include <ctime>
+#include <chrono> // Added for accurate millisecond timing
 using namespace std;
+using namespace std::chrono;
 
 // --- PIECE & COLOR DEFINITIONS ---
 const int EMPTY = 0;
@@ -23,6 +25,23 @@ int sideToMove = WHITE;
 int enPassantSquare = -1;
 int castleWK = 0, castleWQ = 0, castleBK = 0, castleBQ = 0;
 
+// --- TIME MANAGEMENT VARIABLES ---
+long long startTimeMs = 0;
+long long allocatedTimeMs = 0;
+bool timeIsUp = false;
+long nodesSearched = 0;
+
+long long getTimeMs() {
+    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}
+
+void checkTime() {
+    if (timeIsUp) return;
+    if (getTimeMs() - startTimeMs > allocatedTimeMs) {
+        timeIsUp = true;
+    }
+}
+
 // --- MOVE OFFSETS ---
 int knightOffsets[8] = {33, 31, 18, 14, -14, -18, -31, -33};
 int kingOffsets[8]   = {17, 16, 15, 1, -1, -15, -16, -17};
@@ -30,7 +49,7 @@ int bishopOffsets[4] = {17, 15, -15, -17};
 int rookOffsets[4]   = {16, 1, -1, -16};
 int queenOffsets[8]  = {17, 16, 15, 1, -1, -15, -16, -17};
 
-// --- CORRECTED PIECE-SQUARE TABLES (Right-side up for 0x88) ---
+// --- PIECE-SQUARE TABLES (Right-side up for 0x88) ---
 const int pawnTable[128] = {
      0,  0,  0,  0,  0,  0,  0,  0,   0,0,0,0,0,0,0,0,
      5, 10, 10,-20,-20, 10, 10,  5,   0,0,0,0,0,0,0,0,
@@ -86,7 +105,6 @@ const int queenTable[128] = {
     -20,-10,-10, -5, -5,-10,-10,-20,   0,0,0,0,0,0,0,0
 };
 
-// King table encourages hiding in the corners (castling) and severely penalizes running to the center
 const int kingTable[128] = {
      20, 30, 10,  0,  0, 10, 30, 20,   0,0,0,0,0,0,0,0,
      20, 20,  0,  0,  0,  0, 20, 20,   0,0,0,0,0,0,0,0,
@@ -132,7 +150,6 @@ void parseFEN(string fen) {
     }
     if (colorPart == "w") sideToMove = WHITE; else sideToMove = BLACK;
 
-    // Actually set castling rights from FEN
     if (castlingPart != "-") {
         if (castlingPart.find('K') != string::npos) castleWK = 1;
         if (castlingPart.find('Q') != string::npos) castleWQ = 1;
@@ -185,32 +202,27 @@ void makeMove(string moveStr) {
     int piece = board[src];
     int pieceType = piece & 7;
 
-    // 1. Handle Castling (Teleport the Rook if King moves 2 squares)
     if (pieceType == KING && abs(tgt - src) == 2) {
-        if (tgt == src + 2) { // Kingside
+        if (tgt == src + 2) { 
             board[tgt - 1] = board[src + 3];
             board[src + 3] = EMPTY;
-        } else if (tgt == src - 2) { // Queenside
+        } else if (tgt == src - 2) { 
             board[tgt + 1] = board[src - 4];
             board[src - 4] = EMPTY;
         }
     }
 
-    // 2. Handle En Passant Captures
     if (pieceType == PAWN && tgt == enPassantSquare) {
         if (sideToMove == WHITE) board[tgt - 16] = EMPTY;
         else board[tgt + 16] = EMPTY;
     }
 
-    // 3. Reset En Passant square for the next turn
     enPassantSquare = -1;
 
-    // 4. Set a new En Passant square if a pawn double-pushes
     if (pieceType == PAWN && abs(tgt - src) == 32) {
         enPassantSquare = (sideToMove == WHITE) ? src + 16 : src - 16;
     }
 
-    // 5. Update Castling Rights if King or Rook moves/is captured
     if (pieceType == KING) {
         if (sideToMove == WHITE) { castleWK = 0; castleWQ = 0; }
         else { castleBK = 0; castleBQ = 0; }
@@ -226,7 +238,6 @@ void makeMove(string moveStr) {
     else if (tgt == 119) castleBK = 0;
     else if (tgt == 112) castleBQ = 0;
 
-    // 6. Handle Promotions
     if (moveStr.length() == 5) {
         char promo = moveStr[4];
         int color = piece & (WHITE | BLACK);
@@ -236,7 +247,6 @@ void makeMove(string moveStr) {
         else if (promo == 'n') piece = color | KNIGHT;
     }
 
-    // 7. Execute the move on the array
     board[tgt] = piece;
     board[src] = EMPTY;
     sideToMove = (sideToMove == WHITE) ? BLACK : WHITE;
@@ -260,7 +270,7 @@ int evaluate() {
         else if (pieceType == BISHOP) value = 300 + bishopTable[pstSquare]; 
         else if (pieceType == ROOK) value = 500 + rookTable[pstSquare];
         else if (pieceType == QUEEN) value = 900 + queenTable[pstSquare];
-        else if (pieceType == KING) value = 10000 + kingTable[pstSquare]; // High value so it avoids getting mated
+        else if (pieceType == KING) value = 10000 + kingTable[pstSquare]; 
 
         if (pieceColor == WHITE) score += value;
         else score -= value;
@@ -358,7 +368,6 @@ vector<string> generateMoves() {
                 }
             }
             
-            // --- CASTLING GENERATION ---
             if (pieceType == KING) {
                 if (sideToMove == WHITE && square == 4) { 
                     if (castleWK && board[5] == EMPTY && board[6] == EMPTY) {
@@ -398,6 +407,10 @@ vector<string> generateMoves() {
 }
 
 int search(int depth, int alpha, int beta, bool isMaximizing) {
+    // Throttle the time check so we don't slow down the engine by checking the clock every single microsecond
+    if ((nodesSearched++ & 2047) == 0) checkTime();
+    if (timeIsUp) return 0; // Emergency abort
+
     if (depth == 0) return evaluate();
 
     vector<string> moves = generateMoves();
@@ -435,6 +448,8 @@ int search(int depth, int alpha, int beta, bool isMaximizing) {
         enPassantSquare = backupEP;
         castleWK = backupCWK; castleWQ = backupCWQ; castleBK = backupCBK; castleBQ = backupCBQ;
 
+        if (timeIsUp) return 0; // Abandon ship if time ran out mid-branch
+
         if (isMaximizing) {
             if (score > bestScore) bestScore = score;
             if (bestScore > alpha) alpha = bestScore;
@@ -451,7 +466,6 @@ int search(int depth, int alpha, int beta, bool isMaximizing) {
         for (int i = 0; i < 128; i++) {
             if (!(i & 0x88) && board[i] == (sideToMove | KING)) { kingSq = i; break; }
         }
-        // Depth penalty so the bot aggressively finishes the game
         if (isSquareAttacked(kingSq, sideToMove == WHITE ? BLACK : WHITE)) 
             return isMaximizing ? -10000 - depth : 10000 + depth; 
         else 
@@ -461,55 +475,71 @@ int search(int depth, int alpha, int beta, bool isMaximizing) {
     return bestScore;
 }
 
-string getBestMove(int depth) {
-    vector<string> moves = generateMoves();
-    string bestMove = "0000";
-    bool isMaximizing = (sideToMove == WHITE);
-    int bestScore = isMaximizing ? -100000 : 100000;
-    int alpha = -100000;
-    int beta = 100000;
+string getBestMove() {
+    string globalBestMove = "0000";
+    int maxDepth = 64; // The theoretical maximum it will try to reach
 
-    for (string move : moves) {
-        int backupBoard[128];
-        for(int i=0; i<128; i++) backupBoard[i] = board[i];
-        int backupSide = sideToMove;
-        int backupEP = enPassantSquare;
-        int backupCWK = castleWK, backupCWQ = castleWQ, backupCBK = castleBK, backupCBQ = castleBQ;
+    // ITERATIVE DEEPENING: Search depth 1, then depth 2, then depth 3... until time is up
+    for (int depth = 1; depth <= maxDepth; depth++) {
+        string currentDepthBestMove = "0000";
+        bool isMaximizing = (sideToMove == WHITE);
+        int bestScore = isMaximizing ? -100000 : 100000;
+        int alpha = -100000;
+        int beta = 100000;
 
-        makeMove(move);
+        vector<string> moves = generateMoves();
 
-        int kingSq = -1;
-        for (int i = 0; i < 128; i++) {
-            if (!(i & 0x88) && board[i] == (backupSide | KING)) { kingSq = i; break; }
-        }
+        for (string move : moves) {
+            int backupBoard[128];
+            for(int i=0; i<128; i++) backupBoard[i] = board[i];
+            int backupSide = sideToMove;
+            int backupEP = enPassantSquare;
+            int backupCWK = castleWK, backupCWQ = castleWQ, backupCBK = castleBK, backupCBQ = castleBQ;
 
-        if (isSquareAttacked(kingSq, backupSide == WHITE ? BLACK : WHITE)) {
+            makeMove(move);
+
+            int kingSq = -1;
+            for (int i = 0; i < 128; i++) {
+                if (!(i & 0x88) && board[i] == (backupSide | KING)) { kingSq = i; break; }
+            }
+
+            if (isSquareAttacked(kingSq, backupSide == WHITE ? BLACK : WHITE)) {
+                for(int i=0; i<128; i++) board[i] = backupBoard[i];
+                sideToMove = backupSide;
+                enPassantSquare = backupEP;
+                castleWK = backupCWK; castleWQ = backupCWQ; castleBK = backupCBK; castleBQ = backupCBQ;
+                continue;
+            }
+
+            if (currentDepthBestMove == "0000") currentDepthBestMove = move; 
+
+            int score = search(depth - 1, alpha, beta, !isMaximizing);
+
             for(int i=0; i<128; i++) board[i] = backupBoard[i];
             sideToMove = backupSide;
             enPassantSquare = backupEP;
             castleWK = backupCWK; castleWQ = backupCWQ; castleBK = backupCBK; castleBQ = backupCBQ;
-            continue;
+
+            if (timeIsUp) break; // If time ran out, this score is garbage. Bail out.
+
+            if (isMaximizing) {
+                if (score > bestScore) { bestScore = score; currentDepthBestMove = move; }
+                if (bestScore > alpha) alpha = bestScore;
+            } else {
+                if (score < bestScore) { bestScore = score; currentDepthBestMove = move; }
+                if (bestScore < beta) beta = bestScore;
+            }
         }
 
-        // Safety Net: Lock in the first legal move so we NEVER output 0000
-        if (bestMove == "0000") bestMove = move;
+        if (timeIsUp) break; // Keep the best move from the PREVIOUS fully completed depth
+        
+        globalBestMove = currentDepthBestMove;
 
-        int score = search(depth - 1, alpha, beta, !isMaximizing);
-
-        for(int i=0; i<128; i++) board[i] = backupBoard[i];
-        sideToMove = backupSide;
-        enPassantSquare = backupEP;
-        castleWK = backupCWK; castleWQ = backupCWQ; castleBK = backupCBK; castleBQ = backupCBQ;
-
-        if (isMaximizing) {
-            if (score > bestScore) { bestScore = score; bestMove = move; }
-            if (bestScore > alpha) alpha = bestScore;
-        } else {
-            if (score < bestScore) { bestScore = score; bestMove = move; }
-            if (bestScore < beta) beta = bestScore;
-        }
+        // If we found a forced mate, no need to keep searching deeper
+        if (bestScore > 9000 || bestScore < -9000) break;
     }
-    return bestMove;
+    
+    return globalBestMove;
 }
 
 long perft(int depth) {
@@ -576,7 +606,33 @@ void uciLoop() {
             }
         }
         else if (line.substr(0, 2) == "go") {
-            string bestMove = getBestMove(3);
+            // --- TIME PARSING ---
+            int wtime = 0, btime = 0, movetime = -1;
+            
+            size_t wpos = line.find("wtime ");
+            if (wpos != string::npos) wtime = stoi(line.substr(wpos + 6));
+            
+            size_t bpos = line.find("btime ");
+            if (bpos != string::npos) btime = stoi(line.substr(bpos + 6));
+            
+            size_t mpos = line.find("movetime ");
+            if (mpos != string::npos) movetime = stoi(line.substr(mpos + 9));
+
+            // Calculate how much time we are allowed to spend on this specific move
+            if (movetime != -1) {
+                allocatedTimeMs = movetime - 50; // Give a 50ms buffer so we don't lag out
+            } else {
+                int timeLeft = (sideToMove == WHITE) ? wtime : btime;
+                allocatedTimeMs = (timeLeft / 30) - 50; // Basic rule: expect the game to last ~30 more moves
+                if (allocatedTimeMs < 100) allocatedTimeMs = 100; // Never spend less than 0.1s
+            }
+
+            startTimeMs = getTimeMs();
+            timeIsUp = false;
+            nodesSearched = 0;
+
+            // We don't pass depth anymore, the clock controls it!
+            string bestMove = getBestMove();
             cout << "bestmove " << bestMove << "\n";
         }
         else if (line == "d") {
