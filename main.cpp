@@ -4,11 +4,11 @@
 #include <vector>
 #include <cstdlib>
 #include <ctime>
-#include <chrono> // Added for accurate millisecond timing
+#include <chrono>
+#include <algorithm> 
 using namespace std;
 using namespace std::chrono;
 
-// --- PIECE & COLOR DEFINITIONS ---
 const int EMPTY = 0;
 const int PAWN   = 1;
 const int KNIGHT = 2;
@@ -19,13 +19,11 @@ const int KING   = 6;
 const int WHITE = 8;
 const int BLACK = 16;
 
-// --- THE BOARD & STATE ---
 int board[128];
 int sideToMove = WHITE;
 int enPassantSquare = -1;
 int castleWK = 0, castleWQ = 0, castleBK = 0, castleBQ = 0;
 
-// --- TIME MANAGEMENT VARIABLES ---
 long long startTimeMs = 0;
 long long allocatedTimeMs = 0;
 bool timeIsUp = false;
@@ -42,14 +40,12 @@ void checkTime() {
     }
 }
 
-// --- MOVE OFFSETS ---
 int knightOffsets[8] = {33, 31, 18, 14, -14, -18, -31, -33};
 int kingOffsets[8]   = {17, 16, 15, 1, -1, -15, -16, -17};
 int bishopOffsets[4] = {17, 15, -15, -17};
 int rookOffsets[4]   = {16, 1, -1, -16};
 int queenOffsets[8]  = {17, 16, 15, 1, -1, -15, -16, -17};
 
-// --- PIECE-SQUARE TABLES (Right-side up for 0x88) ---
 const int pawnTable[128] = {
      0,  0,  0,  0,  0,  0,  0,  0,   0,0,0,0,0,0,0,0,
      5, 10, 10,-20,-20, 10, 10,  5,   0,0,0,0,0,0,0,0,
@@ -406,14 +402,50 @@ vector<string> generateMoves() {
     return moves;
 }
 
+int getPieceValue(int piece) {
+    int type = piece & 7;
+    if (type == PAWN) return 100;
+    if (type == KNIGHT) return 300;
+    if (type == BISHOP) return 300;
+    if (type == ROOK) return 500;
+    if (type == QUEEN) return 900;
+    return 0;
+}
+
+int scoreMove(string moveStr) {
+    int score = 0;
+    int src = algebraicToSquare(moveStr.substr(0, 2));
+    int tgt = algebraicToSquare(moveStr.substr(2, 2));
+    int attacker = board[src];
+    int victim = board[tgt];
+
+    if (victim != EMPTY) {
+        score += 10 * getPieceValue(victim) - getPieceValue(attacker);
+    }
+
+    if (moveStr.length() == 5) {
+        char promo = moveStr[4];
+        if (promo == 'q') score += 900;
+        else if (promo == 'r') score += 500;
+        else if (promo == 'b') score += 300;
+        else if (promo == 'n') score += 300;
+    }
+
+    return score;
+}
+
 int search(int depth, int alpha, int beta, bool isMaximizing) {
-    // Throttle the time check so we don't slow down the engine by checking the clock every single microsecond
     if ((nodesSearched++ & 2047) == 0) checkTime();
-    if (timeIsUp) return 0; // Emergency abort
+    if (timeIsUp) return 0; 
 
     if (depth == 0) return evaluate();
 
     vector<string> moves = generateMoves();
+    
+    sort(moves.begin(), moves.end(), [](const string& a, const string& b) {
+        return scoreMove(a) > scoreMove(b);
+    });
+
     int legalMovesCount = 0;
     int bestScore = isMaximizing ? -100000 : 100000;
 
@@ -448,7 +480,7 @@ int search(int depth, int alpha, int beta, bool isMaximizing) {
         enPassantSquare = backupEP;
         castleWK = backupCWK; castleWQ = backupCWQ; castleBK = backupCBK; castleBQ = backupCBQ;
 
-        if (timeIsUp) return 0; // Abandon ship if time ran out mid-branch
+        if (timeIsUp) return 0; 
 
         if (isMaximizing) {
             if (score > bestScore) bestScore = score;
@@ -477,9 +509,8 @@ int search(int depth, int alpha, int beta, bool isMaximizing) {
 
 string getBestMove() {
     string globalBestMove = "0000";
-    int maxDepth = 64; // The theoretical maximum it will try to reach
+    int maxDepth = 64; 
 
-    // ITERATIVE DEEPENING: Search depth 1, then depth 2, then depth 3... until time is up
     for (int depth = 1; depth <= maxDepth; depth++) {
         string currentDepthBestMove = "0000";
         bool isMaximizing = (sideToMove == WHITE);
@@ -488,6 +519,10 @@ string getBestMove() {
         int beta = 100000;
 
         vector<string> moves = generateMoves();
+
+        sort(moves.begin(), moves.end(), [](const string& a, const string& b) {
+            return scoreMove(a) > scoreMove(b);
+        });
 
         for (string move : moves) {
             int backupBoard[128];
@@ -520,7 +555,7 @@ string getBestMove() {
             enPassantSquare = backupEP;
             castleWK = backupCWK; castleWQ = backupCWQ; castleBK = backupCBK; castleBQ = backupCBQ;
 
-            if (timeIsUp) break; // If time ran out, this score is garbage. Bail out.
+            if (timeIsUp) break; 
 
             if (isMaximizing) {
                 if (score > bestScore) { bestScore = score; currentDepthBestMove = move; }
@@ -531,11 +566,10 @@ string getBestMove() {
             }
         }
 
-        if (timeIsUp) break; // Keep the best move from the PREVIOUS fully completed depth
+        if (timeIsUp) break; 
         
         globalBestMove = currentDepthBestMove;
 
-        // If we found a forced mate, no need to keep searching deeper
         if (bestScore > 9000 || bestScore < -9000) break;
     }
     
@@ -606,7 +640,6 @@ void uciLoop() {
             }
         }
         else if (line.substr(0, 2) == "go") {
-            // --- TIME PARSING ---
             int wtime = 0, btime = 0, movetime = -1;
             
             size_t wpos = line.find("wtime ");
@@ -618,20 +651,18 @@ void uciLoop() {
             size_t mpos = line.find("movetime ");
             if (mpos != string::npos) movetime = stoi(line.substr(mpos + 9));
 
-            // Calculate how much time we are allowed to spend on this specific move
             if (movetime != -1) {
-                allocatedTimeMs = movetime - 50; // Give a 50ms buffer so we don't lag out
+                allocatedTimeMs = movetime - 50; 
             } else {
                 int timeLeft = (sideToMove == WHITE) ? wtime : btime;
-                allocatedTimeMs = (timeLeft / 30) - 50; // Basic rule: expect the game to last ~30 more moves
-                if (allocatedTimeMs < 100) allocatedTimeMs = 100; // Never spend less than 0.1s
+                allocatedTimeMs = (timeLeft / 30) - 50; 
+                if (allocatedTimeMs < 100) allocatedTimeMs = 100; 
             }
 
             startTimeMs = getTimeMs();
             timeIsUp = false;
             nodesSearched = 0;
 
-            // We don't pass depth anymore, the clock controls it!
             string bestMove = getBestMove();
             cout << "bestmove " << bestMove << "\n";
         }
